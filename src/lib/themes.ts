@@ -1,0 +1,182 @@
+export interface Theme {
+  id: string;
+  name: string;
+  dark: boolean;
+  vars: Record<string, string>;
+}
+
+const series = {
+  "--s-chips": "#22c55e",
+  "--s-sd": "#60a5fa",
+  "--s-nsd": "#ef4444",
+  "--s-ev": "#f5b82e",
+  "--s-min": "#a855f7",
+  "--s-luck": "#22d3ee",
+  "--s-hu": "#f472b6",
+  "--s-3max": "#a3e635",
+  "--s-real": "#22c55e",
+  "--s-realrb": "#10b981",
+  "--s-evp": "#f5b82e",
+  "--s-evm": "#a855f7",
+  "--s-eve": "#60a5fa",
+  "--s-rb": "#94a3b8",
+};
+
+export const THEMES: Theme[] = [
+  {
+    id: "highroller",
+    name: "High Roller",
+    dark: true,
+    vars: {
+      "--bg": "#0c0a09",
+      "--bg2": "#110d0c",
+      "--surface": "#171211",
+      "--surface2": "#1f1917",
+      "--surface3": "#2a221f",
+      "--border": "#2e2522",
+      "--text": "#f4efe6",
+      "--muted": "#a39a90",
+      "--faint": "#6b625b",
+      "--accent": "#d63c43",
+      "--accent-ink": "#ffffff",
+      "--gold": "#d9ad4a",
+      "--pos": "#34c46a",
+      "--neg": "#ef5350",
+      "--warn": "#f0a93b",
+      "--felt": "#1b4d36",
+      "--felt2": "#0f2f21",
+      "--rail": "#3a2417",
+      ...series,
+    },
+  },
+  {
+    id: "felt",
+    name: "Tapis vert",
+    dark: true,
+    vars: {
+      "--bg": "#07140f",
+      "--bg2": "#0a1a13",
+      "--surface": "#0e211a",
+      "--surface2": "#132b22",
+      "--surface3": "#1a372c",
+      "--border": "#1f3d31",
+      "--text": "#eef5ee",
+      "--muted": "#94ad9f",
+      "--faint": "#5d7a6b",
+      "--accent": "#e2b347",
+      "--accent-ink": "#1a1204",
+      "--gold": "#e2b347",
+      "--pos": "#4ade80",
+      "--neg": "#f87171",
+      "--warn": "#fbbf24",
+      "--felt": "#1f6b47",
+      "--felt2": "#0f3d28",
+      "--rail": "#4a2c19",
+      ...series,
+    },
+  },
+  {
+    id: "vegas",
+    name: "Midnight Vegas",
+    dark: true,
+    vars: {
+      "--bg": "#080a14",
+      "--bg2": "#0b0e1b",
+      "--surface": "#11152a",
+      "--surface2": "#171c36",
+      "--surface3": "#1f2544",
+      "--border": "#252c50",
+      "--text": "#eef0ff",
+      "--muted": "#9aa1c9",
+      "--faint": "#646b94",
+      "--accent": "#ff3d9a",
+      "--accent-ink": "#ffffff",
+      "--gold": "#22d3ee",
+      "--pos": "#39e58c",
+      "--neg": "#ff5470",
+      "--warn": "#ffb020",
+      "--felt": "#1d2b6b",
+      "--felt2": "#10183f",
+      "--rail": "#2b1f47",
+      ...series,
+    },
+  },
+  {
+    id: "royal",
+    name: "Royal Flush",
+    dark: true,
+    vars: {
+      "--bg": "#0d0912",
+      "--bg2": "#120c18",
+      "--surface": "#191120",
+      "--surface2": "#21172b",
+      "--surface3": "#2b1f37",
+      "--border": "#33253f",
+      "--text": "#f6f0fa",
+      "--muted": "#ad9fbc",
+      "--faint": "#735f85",
+      "--accent": "#c9a227",
+      "--accent-ink": "#1a1204",
+      "--gold": "#c9a227",
+      "--pos": "#4ade80",
+      "--neg": "#f87171",
+      "--warn": "#fbbf24",
+      "--felt": "#4b1f5e",
+      "--felt2": "#2a1036",
+      "--rail": "#3b2412",
+      ...series,
+    },
+  },
+  {
+    id: "ivory",
+    name: "Ivoire (clair)",
+    dark: false,
+    vars: {
+      "--bg": "#f3eee4",
+      "--bg2": "#ebe4d6",
+      "--surface": "#fbf8f2",
+      "--surface2": "#f2ece1",
+      "--surface3": "#e7dfd0",
+      "--border": "#ddd3c1",
+      "--text": "#1d1714",
+      "--muted": "#6d6258",
+      "--faint": "#a0958a",
+      "--accent": "#b3202a",
+      "--accent-ink": "#ffffff",
+      "--gold": "#a37a1f",
+      "--pos": "#15803d",
+      "--neg": "#c62828",
+      "--warn": "#b45309",
+      "--felt": "#2f7a52",
+      "--felt2": "#1d5539",
+      "--rail": "#6b4428",
+      "--s-chips": "#16a34a",
+      "--s-sd": "#2563eb",
+      "--s-nsd": "#dc2626",
+      "--s-ev": "#d97706",
+      "--s-min": "#9333ea",
+      "--s-luck": "#0891b2",
+      "--s-hu": "#db2777",
+      "--s-3max": "#65a30d",
+      "--s-real": "#16a34a",
+      "--s-realrb": "#059669",
+      "--s-evp": "#d97706",
+      "--s-evm": "#9333ea",
+      "--s-eve": "#2563eb",
+      "--s-rb": "#64748b",
+    },
+  },
+];
+
+export function applyTheme(id: string, accent?: string | null, overrides?: Record<string, string>) {
+  const th = THEMES.find((t) => t.id === id) ?? THEMES[0];
+  const root = document.documentElement;
+  for (const [k, v] of Object.entries(th.vars)) root.style.setProperty(k, v);
+  if (accent) root.style.setProperty("--accent", accent);
+  if (overrides) for (const [k, v] of Object.entries(overrides)) root.style.setProperty(k, v);
+  root.dataset.theme = th.dark ? "dark" : "light";
+}
+
+export function cssVar(name: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
