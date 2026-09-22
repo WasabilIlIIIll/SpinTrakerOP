@@ -29,8 +29,27 @@ fn is_ready(state: tauri::State<AppState>) -> bool {
     state.ready.load(Ordering::SeqCst)
 }
 
+/// Reprend la base d'une ancienne version (identifiant `com.spintrackerop.app`).
+fn migrate_legacy_data(dir: &std::path::Path) {
+    if dir.join("spintracker.db").exists() {
+        return;
+    }
+    let Some(parent) = dir.parent() else { return };
+    let old = parent.join("com.spintrackerop.app");
+    if !old.join("spintracker.db").exists() {
+        return;
+    }
+    for f in ["spintracker.db", "spintracker.db-wal", "spintracker.db-shm"] {
+        let (src, dst) = (old.join(f), dir.join(f));
+        if src.exists() {
+            let _ = std::fs::copy(&src, &dst);
+        }
+    }
+}
+
 pub fn open_state(dir: &std::path::Path) -> Result<AppState, String> {
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    migrate_legacy_data(dir);
     let db_path = dir.join("spintracker.db");
     let db = db::Db::open(&db_path)?;
     let mut st = store::Store::default();

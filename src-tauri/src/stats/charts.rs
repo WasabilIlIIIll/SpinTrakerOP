@@ -194,10 +194,26 @@ pub fn build_notes(x: &[f64], v: &[f64], series: &str, fmt: impl Fn(f64) -> Stri
         be = (peak_i, last);
     }
     if v[pk] > 0.0 {
-        out.push(Note { kind: "peak".into(), label: format!("Plus haut {}", fmt(v[pk])), x: x[pk], y: v[pk], x2: None, y2: None, series: series.into() });
+        out.push(Note {
+            kind: "peak".into(),
+            label: format!("Plus haut {}", fmt(v[pk])),
+            x: x[pk],
+            y: v[pk],
+            x2: None,
+            y2: None,
+            series: series.into(),
+        });
     }
     if v[lw] < 0.0 {
-        out.push(Note { kind: "low".into(), label: format!("Plus bas {}", fmt(v[lw])), x: x[lw], y: v[lw], x2: None, y2: None, series: series.into() });
+        out.push(Note {
+            kind: "low".into(),
+            label: format!("Plus bas {}", fmt(v[lw])),
+            x: x[lw],
+            y: v[lw],
+            x2: None,
+            y2: None,
+            series: series.into(),
+        });
     }
     if down.0 > 0.0 {
         out.push(Note {

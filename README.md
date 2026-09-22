@@ -75,6 +75,16 @@ Les tables de multiplicateurs sont **éditables** (Paramètres → Multiplicateu
 automatiquement renormalisées sur le retour réel au joueur de vos tournois : même si les
 probabilités officielles de votre room changent, l'EV reste juste.
 
+## Changer le logo
+
+Remplacez `app-icon.svg` (ou déposez un PNG carré d'au moins 1024 px) puis lancez :
+
+```bash
+npm run icons
+```
+
+Toutes les tailles (Windows, macOS, Linux, favicon) sont regénérées automatiquement.
+
 ## Vie privée
 
 Aucune donnée ne quitte votre machine, aucune requête réseau, aucun compte.

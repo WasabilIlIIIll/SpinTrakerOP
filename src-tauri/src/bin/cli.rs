@@ -21,7 +21,7 @@ fn data_dir() -> PathBuf {
         .map(PathBuf::from)
         .or_else(|_| std::env::var("HOME").map(|h| PathBuf::from(h).join(".local/share")))
         .unwrap_or_default();
-    base.join("com.spintrackerop.app")
+    base.join("com.spintrackerop.desktop")
 }
 
 fn main() {
