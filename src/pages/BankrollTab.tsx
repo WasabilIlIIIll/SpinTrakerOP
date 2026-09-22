@@ -4,6 +4,7 @@ import { useApp, useQuery } from "../lib/state";
 import { LineChart, type LineSeries } from "../components/LineChart";
 import { ChartFilters } from "../components/ChartFilters";
 import { Empty, Help, Loading, Priv, Seg, Toggle } from "../components/ui";
+import type { BankrollChart as BankrollChartData } from "../lib/api";
 import { Icon } from "../components/Icon";
 import { cls, date, money, mult, num, tone } from "../lib/format";
 import { t } from "../lib/i18n";
@@ -18,7 +19,7 @@ export const BR_SERIES = [
 ];
 
 export function BankrollTab({ full, onFull }: { full?: boolean; onFull?: () => void }) {
-  const { filter, prefs, setPrefs, open } = useApp();
+  const { filter, prefs, setPrefs } = useApp();
   const axis = prefs.bankrollAxis;
   const { data, loading } = useQuery(["bankroll", filter, axis], () => api.bankrollChart(filter, axis));
   const { data: sum } = useQuery(["summary", filter], () => api.summary(filter));
@@ -44,7 +45,7 @@ export function BankrollTab({ full, onFull }: { full?: boolean; onFull?: () => v
   const fmtY = (v: number) => `${num(v, Math.abs(v) < 100 ? 1 : 0)} ${prefs.currency}`;
   return (
     <div className="br-grid">
-      <div className={cls("chart-card", full && "full")}>
+      <div className={cls("chart-card", full ? "full" : "with-events")}>
         <ChartFilters full={full} onFull={onFull} />
         <div className="chart-top">
           {sum && (
@@ -68,6 +69,9 @@ export function BankrollTab({ full, onFull }: { full?: boolean; onFull?: () => v
             </div>
           )}
           <div className="grow" />
+          <button className={cls("pill", prefs.showNotes && "on")} onClick={() => setPrefs({ showNotes: !prefs.showNotes })} title="Afficher les événements marquants sur la courbe">
+            <Icon name="sparkle" size={13} /> Événements
+          </button>
           <Toggle on={prefs.includeBankrollStart} onChange={(v) => setPrefs({ includeBankrollStart: v })} label="Bankroll de départ" />
           <Seg small value={axis} onChange={(v) => setPrefs({ bankrollAxis: v })} options={[{ v: "tournaments", l: t("Tournois") }, { v: "date", l: t("Date") }]} />
         </div>
@@ -88,52 +92,106 @@ export function BankrollTab({ full, onFull }: { full?: boolean; onFull?: () => v
               </button>
             ))}
           </div>
-          <div className="grow" />
-          <button className={cls("lg", prefs.showNotes && "on")} onClick={() => setPrefs({ showNotes: !prefs.showNotes })}>
-            <Icon name="sparkle" size={13} /> Événements
-          </button>
         </div>
       </div>
-      {!full && ev && (
-        <div className="ev-strip">
-          <Ev icon="sparkle" label="Plus gros upswing" value={money(ev.upswing.amount)} tone="pos" sub={`${ev.upswing.to - ev.upswing.from} spins`} />
-          <Ev icon="thumbdown" label="Plus gros downswing" value={money(-ev.downswing.amount)} tone="neg" sub={`${ev.downswing.to - ev.downswing.from} spins`} />
-          <Ev icon="crown" label="Plus haut" value={money(ev.peak[1] + offset)} tone="pos" sub={`spin #${ev.peak[0]}`} />
-          <Ev icon="skull" label="Plus bas" value={money(ev.low[1] + offset)} tone="neg" sub={`spin #${ev.low[0]}`} />
-          <Ev icon="clock" label="Break-even le plus long" value={`${num(ev.longest_break_even.amount)} spins`} sub={`jusqu'au spin #${ev.longest_break_even.to}`} />
-          <Ev icon="target" label="Depuis le dernier sommet" value={`${num(ev.since_peak)} spins`} sub={money(-ev.current_drawdown)} tone={ev.current_drawdown > 0 ? "neg" : "pos"} />
-          <Ev icon="calendar" label="Meilleure journée" value={money(ev.best_day[1])} tone="pos" sub={date(ev.best_day[0])} />
-          <Ev icon="calendar" label="Pire journée" value={money(ev.worst_day[1])} tone="neg" sub={date(ev.worst_day[0])} />
-          <Ev icon="flame" label="Séries" value={`${ev.best_streak} victoires`} sub={`${ev.worst_streak} défaites d'affilée`} />
-          {ev.jackpots
-            .slice()
-            .reverse()
-            .slice(0, 6)
-            .map((j) => (
-              <button key={j.tid} className="ev-item jp" onClick={() => open({ type: "tournament", id: j.tid })}>
-                <span className="ev-ic gold">
-                  <Icon name="star" size={15} />
-                </span>
-                <div className="ev-t">
-                  <span>Jackpot {mult(j.mult)}</span>
-                  <small>{date(j.ts)}</small>
-                </div>
-                <b className={tone(j.won)}>
-                  <Priv k="profit">{money(j.won)}</Priv>
-                </b>
-              </button>
+      {!full && ev && <EventsPanel ev={ev} offset={offset} />}
+    </div>
+  );
+}
+
+interface EvItem {
+  icon: string;
+  label: string;
+  value: string;
+  sub?: string;
+  tone?: string;
+  onClick?: () => void;
+  gold?: boolean;
+}
+
+/** Événements marquants, avec trois dispositions au choix. */
+function EventsPanel({ ev, offset }: { ev: NonNullable<BankrollChartData>["events"]; offset: number }) {
+  const { prefs, setPrefs, open } = useApp();
+  const layout = prefs.eventsLayout;
+  const items: EvItem[] = [
+    { icon: "sparkle", label: "Plus gros upswing", value: money(ev.upswing.amount), tone: "pos", sub: `${ev.upswing.to - ev.upswing.from} spins` },
+    { icon: "thumbdown", label: "Plus gros downswing", value: money(-ev.downswing.amount), tone: "neg", sub: `${ev.downswing.to - ev.downswing.from} spins` },
+    { icon: "target", label: "Depuis le dernier sommet", value: `${num(ev.since_peak)} spins`, sub: money(-ev.current_drawdown), tone: ev.current_drawdown > 0 ? "neg" : "pos" },
+    { icon: "crown", label: "Plus haut", value: money(ev.peak[1] + offset), tone: "pos", sub: `spin #${ev.peak[0]}` },
+    { icon: "skull", label: "Plus bas", value: money(ev.low[1] + offset), tone: "neg", sub: `spin #${ev.low[0]}` },
+    { icon: "clock", label: "Break-even le plus long", value: `${num(ev.longest_break_even.amount)} spins`, sub: `jusqu'au spin #${ev.longest_break_even.to}` },
+    { icon: "calendar", label: "Meilleure journée", value: money(ev.best_day[1]), tone: "pos", sub: date(ev.best_day[0]) },
+    { icon: "calendar", label: "Pire journée", value: money(ev.worst_day[1]), tone: "neg", sub: date(ev.worst_day[0]) },
+    { icon: "flame", label: "Séries", value: `${ev.best_streak} victoires`, sub: `${ev.worst_streak} défaites d'affilée` },
+    ...ev.jackpots
+      .slice()
+      .reverse()
+      .slice(0, 8)
+      .map((j) => ({
+        icon: "star",
+        label: `Jackpot ${mult(j.mult)}`,
+        value: money(j.won),
+        tone: tone(j.won),
+        sub: date(j.ts),
+        gold: true,
+        onClick: () => open({ type: "tournament", id: j.tid }),
+      })),
+  ];
+  const hero = items.slice(0, 3);
+  const rest = items.slice(3);
+  return (
+    <div className="ev-wrap">
+      <div className="ev-head">
+        <h3>Événements marquants</h3>
+        <Help text="Ces repères sont aussi tracés directement sur la courbe. La disposition choisie est conservée." />
+        <div className="grow" />
+        <Seg
+          small
+          value={layout}
+          onChange={(v) => setPrefs({ eventsLayout: v })}
+          options={[
+            { v: "vedette", l: "Vedette" },
+            { v: "compact", l: "Compact" },
+            { v: "liste", l: "Liste" },
+          ]}
+        />
+      </div>
+      {layout === "vedette" ? (
+        <div className="ev-hero-wrap">
+          <div className="ev-hero">
+            {hero.map((i) => (
+              <EvCard key={i.label} {...i} big />
             ))}
+          </div>
+          <div className="ev-mini">
+            {rest.map((i) => (
+              <EvCard key={i.label + i.sub} {...i} mini />
+            ))}
+          </div>
+        </div>
+      ) : layout === "liste" ? (
+        <div className="ev-list">
+          {items.map((i) => (
+            <EvCard key={i.label + i.sub} {...i} mini />
+          ))}
+        </div>
+      ) : (
+        <div className="ev-strip">
+          {items.map((i) => (
+            <EvCard key={i.label + i.sub} {...i} />
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-function Ev({ icon, label, value, sub, tone: tn }: { icon: string; label: string; value: string; sub?: string; tone?: string }) {
+function EvCard({ icon, label, value, sub, tone: tn, onClick, gold, big, mini }: EvItem & { big?: boolean; mini?: boolean }) {
+  const Tag = onClick ? "button" : "div";
   return (
-    <div className="ev-item">
-      <span className="ev-ic">
-        <Icon name={icon} size={15} />
+    <Tag className={cls("ev-item", big && "big", mini && "mini", onClick && "jp")} onClick={onClick}>
+      <span className={cls("ev-ic", gold && "gold")}>
+        <Icon name={icon} size={big ? 18 : 15} />
       </span>
       <div className="ev-t">
         <span>{label}</span>
@@ -142,6 +200,6 @@ function Ev({ icon, label, value, sub, tone: tn }: { icon: string; label: string
       <b className={tn}>
         <Priv k="profit">{value}</Priv>
       </b>
-    </div>
+    </Tag>
   );
 }

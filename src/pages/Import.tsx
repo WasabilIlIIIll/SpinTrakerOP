@@ -2,13 +2,14 @@ import { useEffect, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { api, type ImportResult } from "../lib/api";
 import { useApp, useQuery, clearCache } from "../lib/state";
-import { Btn, Loading, Panel, Seg } from "../components/ui";
+import { Btn, Loading, Modal, Panel, Seg } from "../components/ui";
 import { Icon } from "../components/Icon";
 import { Heatmap } from "../components/Heatmap";
 import { cls, date, num } from "../lib/format";
 
 export function ImportPage() {
   const { bump, toast, overview, filter } = useApp();
+  const [del, setDel] = useState<{ id: number; label: string; remaining: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ phase: string; done: number; total: number } | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
@@ -131,36 +132,85 @@ export function ImportPage() {
       >
         {cal ? <Heatmap data={cal} metric={metric} /> : <Loading h={160} />}
       </Panel>
-      <Panel title="Historique des imports" pad={false}>
+      <Panel
+        title="Historique des imports"
+        help="Chaque import est un lot : le supprimer retire uniquement les mains qu'il avait ajoutées (les doublons déjà présents sont conservés). Les mains déjà en base ne sont jamais importées deux fois."
+        pad={false}
+      >
         <div className="tbl-wrap" style={{ maxHeight: 260 }}>
           <table className="tbl">
             <thead>
               <tr>
                 <th>Date</th>
+                <th>Contenu</th>
                 <th className="r">Sources</th>
-                <th className="r">Mains</th>
+                <th className="r">Mains lues</th>
                 <th className="r">Importées</th>
-                <th className="r">Doublons</th>
+                <th className="r">Doublons ignorés</th>
                 <th className="r">Invalides</th>
-                <th>Statut</th>
+                <th className="r">En base</th>
+                <th />
               </tr>
             </thead>
             <tbody>
-              {(hist ?? []).map((h, i) => (
-                <tr key={i}>
+              {(hist ?? []).map((h) => (
+                <tr key={h.id}>
                   <td>{date(h.ts, true)}</td>
+                  <td className="muted">{h.label || "–"}</td>
                   <td className="r">{num(h.sources)}</td>
                   <td className="r">{num(h.hands)}</td>
                   <td className="r pos">{num(h.imported)}</td>
-                  <td className="r">{num(h.duplicates)}</td>
+                  <td className="r muted">{num(h.duplicates)}</td>
                   <td className={cls("r", h.invalid > 0 && "neg")}>{num(h.invalid)}</td>
-                  <td className="pos">TERMINÉ</td>
+                  <td className="r">{num(h.remaining)}</td>
+                  <td className="r">
+                    <button
+                      className="icon-btn"
+                      disabled={h.remaining === 0}
+                      title={
+                        h.remaining === 0
+                          ? "Import antérieur au suivi par lots : ses mains ne peuvent plus être isolées (Paramètres → Données pour tout effacer)"
+                          : "Supprimer cet import et les mains qu'il a apportées"
+                      }
+                      onClick={() => setDel({ id: h.id, label: h.label || date(h.ts, true), remaining: h.remaining })}
+                    >
+                      <Icon name="trash" size={14} />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </Panel>
+      {del && (
+        <Modal title="Supprimer cet import" onClose={() => setDel(null)}>
+          <p>
+            L'import <b>{del.label}</b> sera retiré de la base : <b>{num(del.remaining)} mains</b> et les tournois devenus vides seront supprimés. Les mains apportées par
+            d'autres imports ne sont pas touchées.
+          </p>
+          <div className="row gap8" style={{ justifyContent: "flex-end", marginTop: 16 }}>
+            <Btn onClick={() => setDel(null)}>Annuler</Btn>
+            <Btn
+              kind="danger"
+              icon="trash"
+              onClick={async () => {
+                try {
+                  const r = await api.deleteImport(del.id);
+                  clearCache();
+                  bump();
+                  toast(`${num(r.hands)} mains et ${num(r.tournaments)} tournois supprimés`);
+                } catch (e) {
+                  toast(String(e), "err");
+                }
+                setDel(null);
+              }}
+            >
+              Supprimer
+            </Btn>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

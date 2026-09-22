@@ -61,6 +61,7 @@ pub fn open_state(dir: &std::path::Path) -> Result<AppState, String> {
     for (n, tags, notes) in db.load_players().unwrap_or_default() {
         st.meta.insert(n, (tags, notes));
     }
+    st.favorites = db.load_favorites().unwrap_or_default();
     Ok(AppState { store: Arc::new(RwLock::new(st)), db: Arc::new(Mutex::new(db)), db_path, ready: Arc::new(AtomicBool::new(false)) })
 }
 
@@ -84,6 +85,7 @@ pub fn run() {
                     let cur = store.read();
                     s.settings = cur.settings.clone();
                     s.meta = cur.meta.clone();
+                    s.favorites = cur.favorites.clone();
                 }
                 let r = import::load(&mut dbc.lock(), &mut s);
                 *store.write() = s;
@@ -123,6 +125,8 @@ pub fn run() {
             commands::save_challenge,
             commands::delete_challenge,
             commands::imports_history,
+            commands::delete_import,
+            commands::set_favorite,
             commands::wipe_database,
             commands::backup_database,
             commands::export_csv,

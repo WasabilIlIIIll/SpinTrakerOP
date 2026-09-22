@@ -3,7 +3,7 @@ import { api } from "../lib/api";
 import { useApp, useQuery } from "../lib/state";
 import { Loading, Panel, Seg, Empty } from "../components/ui";
 import { FilterBar } from "../components/FilterBar";
-import { LeakPanels, PostflopTable, RefLegend } from "../components/LeakPanels";
+import { LeakPanels, PostflopTable, RefLegend, RefSources } from "../components/LeakPanels";
 import { cls, num } from "../lib/format";
 
 const SCENARIOS = ["BTN", "SB vs BTN", "SB vs BB", "BB vs BTN", "BB vs SB", "HU SB", "HU BB"];
@@ -75,6 +75,7 @@ export function LeakFinder() {
           }
           right={<span className="muted small">{num(data.hands)} mains analysées</span>}
         >
+          <RefSources mode={prefs.leakRef} tagName={settings?.tags.find((t) => `tag:${t.id}` === prefs.leakRef)?.name} />
           <RefLegend />
           {tab === "pre" ? <LeakPanels report={data} scenarios={scenario ? [scenario] : undefined} minHands={minHands} /> : <PostflopTable mine={data.postflop.player} reference={data.postflop.reference} />}
         </Panel>

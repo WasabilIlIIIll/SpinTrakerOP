@@ -49,6 +49,8 @@ pub struct Store {
     pub pstats: HashMap<String, PStats>,
     pub auto_tags: HashMap<String, Vec<String>>,
     pub heroes: HashSet<String>,
+    /// mains marquées en favori (id -> note)
+    pub favorites: HashMap<String, String>,
 }
 
 /// Probabilités de finir 1er/2e/3e (Malmuth-Harville, adversaires à tapis égaux).

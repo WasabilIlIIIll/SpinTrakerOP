@@ -5,7 +5,7 @@ import { Modal, Loading, Priv, Seg, Stat, Tags, TagChip, Btn } from "./ui";
 import { Replayer } from "./Replayer";
 import { LineChart } from "./LineChart";
 import { Cards } from "./PlayingCard";
-import { LeakPanels, PostflopTable, RefLegend } from "./LeakPanels";
+import { LeakPanels, PostflopTable, RefLegend, RefSources } from "./LeakPanels";
 import { ago, cls, date, duration, money, mult, num, pct, signed, tone } from "../lib/format";
 
 export function Modals() {
@@ -64,7 +64,7 @@ function TournamentModal({ id, onClose }: { id: string; onClose: () => void }) {
             <Stat label="Place" value={t.place ? `${t.place}${t.place === 1 ? "er" : "e"}` : "?"} tone={t.place === 1 ? "pos" : ""} />
             <Stat label="Gains" value={money(t.winnings)} k="profit" />
             <Stat label="Profit" value={money(t.profit)} tone={tone(t.profit)} k="profit" />
-            <Stat label="Chips / EV" value={`${signed(t.chips, 0)} / ${signed(t.ev, 0)}`} tone={tone(t.ev)} />
+            <Stat label="Chips / CEV" value={`${signed(t.chips, 0)} / ${signed(t.ev, 0)}`} tone={tone(t.ev)} sub="réel / all-in ajusté" />
             <Stat label="EV Profit" value={money(t.ev_profit)} tone={tone(t.ev_profit)} k="profit" />
             <Stat label="Durée" value={duration(t.end - t.start)} sub={`${t.hands} mains · ${num(t.tables, 1)} tables`} />
           </div>
@@ -93,7 +93,7 @@ function TournamentModal({ id, onClose }: { id: string; onClose: () => void }) {
                   <th>Ligne</th>
                   <th>Board</th>
                   <th className="r">Résultat</th>
-                  <th className="r">EV</th>
+                  <th className="r" title="Résultat all-in ajusté de la main, en jetons">CEV</th>
                 </tr>
               </thead>
               <tbody>
@@ -260,7 +260,7 @@ function PlayerModal({ name, onClose }: { name: string; onClose: () => void }) {
               </div>
             </div>
           )}
-          {tab === "pre" && (lr ? <><RefLegend /><LeakPanels report={lr} /></> : <Loading />)}
+          {tab === "pre" && (lr ? (<><RefSources mode={ref} tagName={settings?.tags.find((t) => `tag:${t.id}` === ref)?.name} /><RefLegend /><LeakPanels report={lr} /></>) : <Loading />)}
           {tab === "post" && (lr ? <PostflopTable mine={lr.postflop.player} reference={lr.postflop.reference} /> : <Loading />)}
           {tab === "tourn" && (
             <div className="tbl-wrap" style={{ maxHeight: 460 }}>

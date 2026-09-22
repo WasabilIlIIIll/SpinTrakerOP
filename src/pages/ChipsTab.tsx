@@ -83,6 +83,12 @@ export function ChipsTab({ full, onFull }: { full?: boolean; onFull?: () => void
             </span>
           </div>
         )}
+        <button className={cls("pill", prefs.showNotes && "on")} onClick={() => setPrefs({ showNotes: !prefs.showNotes })} title="Afficher les événements marquants sur la courbe">
+          <Icon name="sparkle" size={13} /> Événements
+        </button>
+        <button className={cls("pill", prefs.showCi && "on")} onClick={() => setPrefs({ showCi: !prefs.showCi })} title="Intervalle de confiance à 95 % du CEV">
+          <Icon name="target" size={13} /> IC 95 %
+        </button>
         <Seg
           small
           value={axis}
@@ -132,13 +138,6 @@ export function ChipsTab({ full, onFull }: { full?: boolean; onFull?: () => void
                   {visible.includes(s.key) && <Icon name="check" size={13} />}
                 </button>
               ))}
-              <div className="dd-sep" />
-              <button className={cls("dd-item", prefs.showCi && "on")} onClick={() => setPrefs({ showCi: !prefs.showCi })}>
-                Intervalle de confiance 95 % {prefs.showCi && <Icon name="check" size={13} />}
-              </button>
-              <button className={cls("dd-item", prefs.showNotes && "on")} onClick={() => setPrefs({ showNotes: !prefs.showNotes })}>
-                Événements sur la courbe {prefs.showNotes && <Icon name="check" size={13} />}
-              </button>
             </div>
           </Dropdown>
         </div>

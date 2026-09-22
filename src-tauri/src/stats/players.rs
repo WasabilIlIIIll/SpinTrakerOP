@@ -46,6 +46,11 @@ pub struct PStats {
     pub hero_ev_profit_vs: f64,
     pub hero_wins_vs: u32,
     pub their_wins_vs: u32,
+    // face au héros, en tête-à-tête uniquement (attribution non ambiguë)
+    pub hu_matches: u32,
+    pub hero_profit_hu_vs: f64,
+    pub hero_hu_ev: f64,
+    pub hero_hu_chips: f64,
 }
 
 fn pct(a: u32, b: u32) -> f64 {
@@ -100,6 +105,22 @@ impl PStats {
                     self.hero_ev_vs / self.vs_hero_tournaments as f64
                 }
             }
+            "cev_hu_vs" => {
+                if self.hu_matches == 0 {
+                    0.0
+                } else {
+                    self.hero_hu_ev / self.hu_matches as f64
+                }
+            }
+            "chips_hu_vs" => {
+                if self.hu_matches == 0 {
+                    0.0
+                } else {
+                    self.hero_hu_chips / self.hu_matches as f64
+                }
+            }
+            "hu_matches" => self.hu_matches as f64,
+            "hero_profit_hu_vs" => self.hero_profit_hu_vs,
             "days_since" => 0.0,
             _ => 0.0,
         }
@@ -289,6 +310,15 @@ pub fn compute_player_stats(s: &Store) -> HashMap<String, PStats> {
                     st.hero_wins_vs += 1;
                 }
                 let _ = ti;
+            }
+        }
+        // tête-à-tête : le résultat du spin est attribuable sans ambiguïté à cet adversaire
+        if let Some(hu) = &t.hu_opp {
+            if let Some(st) = m.get_mut(hu.as_str()) {
+                st.hu_matches += 1;
+                st.hero_profit_hu_vs += t.real;
+                st.hero_hu_ev += t.hu_ev;
+                st.hero_hu_chips += t.hu_chips;
             }
         }
         // EV des adversaires dans ce tournoi

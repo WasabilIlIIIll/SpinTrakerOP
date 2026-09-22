@@ -200,6 +200,7 @@ pub struct HandQuery {
     pub min_bb: Option<f64>,
     pub max_bb: Option<f64>,
     pub hu: Option<bool>,
+    pub favorites: Option<bool>,
     pub sort: Option<String>,
     pub desc: Option<bool>,
     pub offset: usize,
@@ -312,6 +313,11 @@ pub fn hands(state: State<AppState>, q: HandQuery) -> Value {
                     continue;
                 }
             }
+            if let Some(f) = q.favorites {
+                if s.favorites.contains_key(&r.h.id) != f {
+                    continue;
+                }
+            }
             ids.push(hi);
         }
     }
@@ -352,6 +358,8 @@ pub fn hands(state: State<AppState>, q: HandQuery) -> Value {
                 "net": p.net, "ev": p.ev, "pot": r.f.pot, "equity": p.allin_equity,
                 "allin": r.f.allin_street, "players": r.h.seats.len(), "line": hero_line(r),
                 "showdown": r.f.showdown && !p.folded,
+                "fav": s.favorites.contains_key(&r.h.id),
+                "fav_note": s.favorites.get(&r.h.id).cloned().unwrap_or_default(),
             })
         })
         .collect();
@@ -389,6 +397,7 @@ pub fn hand_detail(state: State<AppState>, id: String) -> R<Value> {
         "board": r.h.board.iter().map(|c| card_str(*c)).collect::<Vec<_>>(),
         "pot": r.f.pot, "allin_street": r.f.allin_street, "showdown": r.f.showdown, "eff_bb": r.f.eff_bb,
         "index": pos_in_t + 1, "count": t.hands.len(), "prev": prev, "next": next,
+        "fav": s.favorites.contains_key(&r.h.id), "fav_note": s.favorites.get(&r.h.id).cloned().unwrap_or_default(),
         "tournament": { "id": t.t.id, "name": t.t.name, "multiplier": t.t.multiplier, "buyin": t.t.buyin, "place": t.place, "prize_pool": t.t.prize_pool },
     }))
 }
@@ -442,6 +451,7 @@ fn player_json(s: &crate::store::Store, name: &str, st: &crate::stats::players::
         "af": st.stat("af"), "wtsd": st.stat("wtsd"), "wsd": st.stat("wsd"), "cbet": st.stat("cbet"), "fold_cbet": st.stat("fold_cbet"),
         "cev": st.stat("cev"), "cev_vs_hero": st.stat("cev_vs_hero"), "hero_cev_vs": st.stat("hero_cev_vs"),
         "vs_hero_tournaments": st.vs_hero_tournaments, "hero_profit_vs": st.hero_profit_vs, "hero_ev_profit_vs": st.hero_ev_profit_vs,
+        "hu_matches": st.hu_matches, "hero_profit_hu_vs": st.hero_profit_hu_vs, "cev_hu_vs": st.stat("cev_hu_vs"), "chips_hu_vs": st.stat("chips_hu_vs"),
         "hero_wins_vs": st.hero_wins_vs, "their_wins_vs": st.their_wins_vs,
         "last_ts": st.last_ts, "first_ts": st.first_ts, "is_hero": s.is_hero(name),
     })
@@ -627,10 +637,41 @@ pub fn imports_history(state: State<AppState>) -> R<Vec<Value>> {
     state.db.lock().imports()
 }
 
+/// Supprime un import et toutes les mains qu'il avait ajoutées.
+#[tauri::command]
+pub fn delete_import(state: State<AppState>, id: i64) -> R<Value> {
+    let (hands, tours) = state.db.lock().delete_import(id)?;
+    let mut s = state.store.write();
+    let mut fresh = crate::store::Store {
+        settings: s.settings.clone(),
+        meta: s.meta.clone(),
+        favorites: s.favorites.clone(),
+        ..Default::default()
+    };
+    crate::import::load(&mut state.db.lock(), &mut fresh)?;
+    *s = fresh;
+    Ok(json!({ "hands": hands, "tournaments": tours }))
+}
+
+#[tauri::command]
+pub fn set_favorite(state: State<AppState>, id: String, on: bool, note: Option<String>) -> R<()> {
+    let note = note.unwrap_or_default();
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+    state.db.lock().set_favorite(&id, on, &note, now)?;
+    let mut s = state.store.write();
+    if on {
+        s.favorites.insert(id, note);
+    } else {
+        s.favorites.remove(&id);
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn wipe_database(state: State<AppState>) -> R<()> {
     state.db.lock().wipe()?;
     let mut s = state.store.write();
+    s.favorites.clear();
     s.rebuild(vec![], vec![]);
     Ok(())
 }

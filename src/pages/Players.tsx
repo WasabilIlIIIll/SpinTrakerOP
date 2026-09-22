@@ -37,18 +37,19 @@ export function Players() {
   );
 }
 
-const COLS: [string, string][] = [
-  ["hands", "Mains"],
-  ["vs_hero_tournaments", "Spins ensemble"],
-  ["vpip", "VPIP"],
-  ["pfr", "PFR"],
-  ["limp_btn", "Limp BTN"],
-  ["threebet", "3-bet"],
-  ["af", "AF"],
-  ["cev_vs_hero", "CEV vs vous"],
-  ["hero_cev_vs", "Votre CEV"],
-  ["hero_profit_vs", "Votre profit"],
-  ["last_ts", "Vu"],
+const COLS: [string, string, string][] = [
+  ["hands", "Mains", "Nombre de mains observées sur ce joueur."],
+  ["vs_hero_tournaments", "Spins ensemble", "Spins où vous étiez à la même table."],
+  ["hu_matches", "HU", "Spins où vous vous êtes retrouvés en tête-à-tête."],
+  ["vpip", "VPIP", "Mains jouées volontairement préflop."],
+  ["pfr", "PFR", "Mains relancées préflop."],
+  ["limp_btn", "Limp BTN", "Limps au bouton (premier de parole)."],
+  ["threebet", "3-bet", "Relances par-dessus une première relance."],
+  ["af", "AF", "Agression postflop : (mises + relances) / appels."],
+  ["cev_hu_vs", "CEV HU", "Votre CEV par tête-à-tête contre lui : seule mesure directement attribuable à ce joueur."],
+  ["hero_profit_hu_vs", "Profit HU", "Votre profit réel sur les spins terminés en tête-à-tête contre lui (au pire −1 buy-in par spin)."],
+  ["hero_cev_vs", "CEV (tous)", "Votre CEV moyen sur tous les spins partagés, y compris à 3 : à interpréter avec prudence, le 3e joueur influence le résultat."],
+  ["last_ts", "Vu", "Dernière fois que vous l'avez croisé."],
 ];
 
 function PlayerList() {
@@ -56,7 +57,7 @@ function PlayerList() {
   const [search, setSearch] = useState("");
   const [tag, setTag] = useState<string | null>(null);
   const [minHands, setMinHands] = useState(0);
-  const [sort, setSort] = useState("vs_hero_tournaments");
+  const [sort, setSort] = useState("hu_matches");
   const [desc, setDesc] = useState(true);
   const [offset, setOffset] = useState(0);
   const limit = 100;
@@ -102,8 +103,8 @@ function PlayerList() {
                 <tr>
                   <th>Joueur</th>
                   <th>Tags</th>
-                  {COLS.map(([k, l]) => (
-                    <th key={k} className="r sortable" onClick={() => click(k)}>
+                  {COLS.map(([k, l, h]) => (
+                    <th key={k} className="r sortable" onClick={() => click(k)} title={h}>
                       {l} {sort === k ? (desc ? "↓" : "↑") : ""}
                     </th>
                   ))}
@@ -121,16 +122,17 @@ function PlayerList() {
                     </td>
                     <td className="r">{num(p.hands)}</td>
                     <td className="r">{num(p.vs_hero_tournaments)}</td>
+                    <td className="r">{num(p.hu_matches)}</td>
                     <td className="r">{pct(p.vpip, 0)}</td>
                     <td className="r">{pct(p.pfr, 0)}</td>
                     <td className="r">{pct(p.limp_btn, 0)}</td>
                     <td className="r">{pct(p.threebet, 0)}</td>
                     <td className="r">{num(p.af, 1)}</td>
-                    <td className={cls("r", tone(p.cev_vs_hero))}>{num(p.cev_vs_hero, 0)}</td>
-                    <td className={cls("r", tone(p.hero_cev_vs))}>{num(p.hero_cev_vs, 0)}</td>
-                    <td className={cls("r", tone(p.hero_profit_vs))}>
-                      <Priv k="profit">{money(p.hero_profit_vs)}</Priv>
+                    <td className={cls("r", tone(p.cev_hu_vs))}>{p.hu_matches ? num(p.cev_hu_vs, 0) : "–"}</td>
+                    <td className={cls("r", tone(p.hero_profit_hu_vs))}>
+                      <Priv k="profit">{p.hu_matches ? money(p.hero_profit_hu_vs) : "–"}</Priv>
                     </td>
+                    <td className={cls("r muted", tone(p.hero_cev_vs))}>{num(p.hero_cev_vs, 0)}</td>
                     <td className="r muted">{ago(p.last_ts)}</td>
                     <td>
                       <button

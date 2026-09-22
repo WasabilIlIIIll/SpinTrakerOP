@@ -157,6 +157,17 @@ z = (chips réels − chips EV) / √(Σ variances des situations all-in)
 
 ---
 
+## 8 bis. Attribution des résultats à un adversaire
+
+Un spin à 3 joueurs ne peut pas être attribué à un seul adversaire : votre place dépend aussi
+du troisième joueur. La fiche et la liste des joueurs affichent donc en priorité les mesures
+**restreintes au tête-à-tête** (`CEV HU`, `Profit HU`), calculées uniquement sur les spins où
+vous vous êtes retrouvés seuls face à face. Les colonnes « tous spins » restent disponibles,
+grisées, à titre indicatif.
+
+Rappel : une perte sur un spin vaut **au maximum le buy-in engagé** (5 € sur un Twister 5 €),
+quel que soit le multiplicateur tiré — c'est bien ce que calcule `profit = gains − buy-in`.
+
 ## 9. Statistiques joueurs
 
 | Stat | Définition |
@@ -187,7 +198,17 @@ Chaque décision préflop est rangée dans un **nœud** identifié par :
 - la tranche de tapis effectif en BB (0-4, 4-6, …, 20+),
   où tapis effectif = min(votre tapis, plus gros tapis adverse).
 
-Vos fréquences (All-in / Relance / Call / Fold) sont comparées à une référence :
-population de vos adversaires, joueurs portant un tag donné (par exemple les regs), ou vos
-propres cibles. La tolérance s'adapte à la taille de l'échantillon :
-`tolérance = 4 % + 40/√n`, au-delà de 2,2 × cette tolérance l'écart est signalé en rouge.
+Vos fréquences (All-in / Relance / Call / Fold) sont comparées à une **référence**. Spin Tracker OP
+ne contient **aucune solution GTO** : toutes les références sont statistiques et calculées sur vos
+propres historiques. Trois sources au choix :
+
+| Référence | D'où elle vient |
+|---|---|
+| **Population** | tous les autres joueurs présents dans vos historiques, dans le même nœud et la même tranche de tapis |
+| **Tag** (ex. « Reg ») | uniquement les joueurs portant ce tag — utile pour se comparer aux réguliers de vos parties |
+| **Personnalisée** | vos propres cibles, saisies dans Paramètres → Références (par exemple issues d'un solveur) |
+
+La taille de l'échantillon de référence est affichée sur chaque nœud (« réf. n »).
+La tolérance s'adapte à la taille de **votre** échantillon : `tolérance = 4 % + 40/√n`.
+Vert = écart inférieur à la tolérance, orange = jusqu'à 2,2 × la tolérance, rouge au-delà,
+gris en dessous de 8 décisions (échantillon trop faible pour conclure).

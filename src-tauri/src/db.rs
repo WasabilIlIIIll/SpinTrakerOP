@@ -25,9 +25,14 @@ impl Db {
              CREATE TABLE IF NOT EXISTS players (name TEXT PRIMARY KEY, tags TEXT NOT NULL DEFAULT '[]', notes TEXT NOT NULL DEFAULT '');
              CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
              CREATE TABLE IF NOT EXISTS challenges (id INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT NOT NULL);
-             CREATE TABLE IF NOT EXISTS imports (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, sources INTEGER, hands INTEGER, imported INTEGER, duplicates INTEGER, invalid INTEGER, status TEXT);",
+             CREATE TABLE IF NOT EXISTS imports (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, sources INTEGER, hands INTEGER, imported INTEGER, duplicates INTEGER, invalid INTEGER, status TEXT, label TEXT DEFAULT '');
+             CREATE TABLE IF NOT EXISTS favorites (hand_id TEXT PRIMARY KEY, ts INTEGER, note TEXT NOT NULL DEFAULT '');",
         )
         .map_err(|e| e.to_string())?;
+        // migrations souples (colonnes ajoutées après coup)
+        let _ = conn.execute("ALTER TABLE hands ADD COLUMN batch INTEGER DEFAULT 0", []);
+        let _ = conn.execute("ALTER TABLE imports ADD COLUMN label TEXT DEFAULT ''", []);
+        let _ = conn.execute("CREATE INDEX IF NOT EXISTS hands_batch ON hands(batch)", []);
         Ok(Db { conn })
     }
 
@@ -66,7 +71,7 @@ impl Db {
         Ok(ids)
     }
 
-    pub fn save_batch(&mut self, ts: &[Tournament], hands: &[(Hand, HandFacts)]) -> Result<(), String> {
+    pub fn save_batch(&mut self, ts: &[Tournament], hands: &[(Hand, HandFacts)], batch: i64) -> Result<(), String> {
         let tx = self.conn.transaction().map_err(|e| e.to_string())?;
         {
             let mut st = tx.prepare("INSERT OR REPLACE INTO tournaments (id, start, data) VALUES (?1, ?2, ?3)").map_err(|e| e.to_string())?;
@@ -75,12 +80,12 @@ impl Db {
                 st.execute(params![t.id, t.start, b]).map_err(|e| e.to_string())?;
             }
             let mut sh = tx
-                .prepare("INSERT OR IGNORE INTO hands (id, tid, ts, data, facts, fv) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
+                .prepare("INSERT OR IGNORE INTO hands (id, tid, ts, data, facts, fv, batch) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)")
                 .map_err(|e| e.to_string())?;
             for (h, f) in hands {
                 let b = rmp_serde::to_vec(h).map_err(|e| e.to_string())?;
                 let fb = rmp_serde::to_vec(f).map_err(|e| e.to_string())?;
-                sh.execute(params![h.id, h.tid, h.ts, b, fb, FACTS_VERSION]).map_err(|e| e.to_string())?;
+                sh.execute(params![h.id, h.tid, h.ts, b, fb, FACTS_VERSION, batch]).map_err(|e| e.to_string())?;
             }
         }
         tx.commit().map_err(|e| e.to_string())
@@ -150,27 +155,69 @@ impl Db {
         self.conn.execute("DELETE FROM challenges WHERE id=?1", params![id]).map(|_| ()).map_err(|e| e.to_string())
     }
 
-    pub fn log_import(&self, ts: i64, sources: i64, hands: i64, imported: i64, dup: i64, invalid: i64, status: &str) -> Result<(), String> {
+    /// Crée la ligne d'historique et renvoie son identifiant (= numéro de lot des mains).
+    pub fn start_import(&self, ts: i64, label: &str) -> Result<i64, String> {
+        self.conn
+            .execute("INSERT INTO imports (ts, label, status) VALUES (?1, ?2, 'en cours')", params![ts, label])
+            .map_err(|e| e.to_string())?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    pub fn finish_import(&self, id: i64, sources: i64, hands: i64, imported: i64, dup: i64, invalid: i64, status: &str) -> Result<(), String> {
         self.conn
             .execute(
-                "INSERT INTO imports (ts, sources, hands, imported, duplicates, invalid, status) VALUES (?1,?2,?3,?4,?5,?6,?7)",
-                params![ts, sources, hands, imported, dup, invalid, status],
+                "UPDATE imports SET sources=?1, hands=?2, imported=?3, duplicates=?4, invalid=?5, status=?6 WHERE id=?7",
+                params![sources, hands, imported, dup, invalid, status, id],
             )
             .map(|_| ())
             .map_err(|e| e.to_string())
     }
 
+    /// Supprime un import : ses mains, les tournois devenus vides, et la ligne d'historique.
+    pub fn delete_import(&mut self, id: i64) -> Result<(usize, usize), String> {
+        let tx = self.conn.transaction().map_err(|e| e.to_string())?;
+        let hands = tx.execute("DELETE FROM hands WHERE batch = ?1", params![id]).map_err(|e| e.to_string())?;
+        let tours = tx
+            .execute("DELETE FROM tournaments WHERE id NOT IN (SELECT DISTINCT tid FROM hands)", [])
+            .map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM imports WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+        tx.commit().map_err(|e| e.to_string())?;
+        Ok((hands, tours))
+    }
+
+    pub fn load_favorites(&self) -> Result<std::collections::HashMap<String, String>, String> {
+        let mut st = self.conn.prepare("SELECT hand_id, note FROM favorites").map_err(|e| e.to_string())?;
+        let rows = st
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(rows)
+    }
+
+    pub fn set_favorite(&self, hand_id: &str, on: bool, note: &str, ts: i64) -> Result<(), String> {
+        if on {
+            self.conn
+                .execute("INSERT OR REPLACE INTO favorites (hand_id, ts, note) VALUES (?1, ?2, ?3)", params![hand_id, ts, note])
+                .map_err(|e| e.to_string())?;
+        } else {
+            self.conn.execute("DELETE FROM favorites WHERE hand_id = ?1", params![hand_id]).map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+
     pub fn imports(&self) -> Result<Vec<serde_json::Value>, String> {
         let mut st = self
             .conn
-            .prepare("SELECT ts, sources, hands, imported, duplicates, invalid, status FROM imports ORDER BY id DESC LIMIT 200")
+            .prepare("SELECT ts, sources, hands, imported, duplicates, invalid, status, id, COALESCE(label,''), (SELECT COUNT(*) FROM hands WHERE hands.batch = imports.id) FROM imports ORDER BY id DESC LIMIT 200")
             .map_err(|e| e.to_string())?;
         let rows = st
             .query_map([], |r| {
                 Ok(serde_json::json!({
                     "ts": r.get::<_, i64>(0)?, "sources": r.get::<_, i64>(1)?, "hands": r.get::<_, i64>(2)?,
                     "imported": r.get::<_, i64>(3)?, "duplicates": r.get::<_, i64>(4)?, "invalid": r.get::<_, i64>(5)?,
-                    "status": r.get::<_, String>(6)?
+                    "status": r.get::<_, String>(6)?, "id": r.get::<_, i64>(7)?, "label": r.get::<_, String>(8)?,
+                    "remaining": r.get::<_, i64>(9)?
                 }))
             })
             .map_err(|e| e.to_string())?
@@ -180,6 +227,6 @@ impl Db {
     }
 
     pub fn wipe(&self) -> Result<(), String> {
-        self.conn.execute_batch("DELETE FROM hands; DELETE FROM tournaments; DELETE FROM imports; VACUUM;").map_err(|e| e.to_string())
+        self.conn.execute_batch("DELETE FROM hands; DELETE FROM tournaments; DELETE FROM imports; DELETE FROM favorites; VACUUM;").map_err(|e| e.to_string())
     }
 }

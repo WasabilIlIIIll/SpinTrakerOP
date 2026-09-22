@@ -21,6 +21,8 @@ pub struct ImportResult {
     pub tournaments: usize,
     pub errors: Vec<String>,
     pub millis: u128,
+    /// numéro de lot : permet de supprimer cet import depuis l'historique
+    pub batch: i64,
 }
 
 #[derive(Serialize, Clone)]
@@ -30,14 +32,15 @@ pub struct Progress {
     pub total: usize,
 }
 
-pub fn run(
-    paths: Vec<PathBuf>,
-    store: &parking_lot::RwLock<Store>,
-    db: &parking_lot::Mutex<Db>,
-    progress: &(dyn Fn(Progress) + Sync),
-) -> ImportResult {
+pub fn run(paths: Vec<PathBuf>, store: &parking_lot::RwLock<Store>, db: &parking_lot::Mutex<Db>, progress: &(dyn Fn(Progress) + Sync)) -> ImportResult {
     let t0 = std::time::Instant::now();
     let files = collect_paths(&paths);
+    // libellé lisible de l'import (dossier ou nom de fichier)
+    let label = match paths.len() {
+        0 => String::new(),
+        1 => paths[0].file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default(),
+        n => format!("{} sources", n),
+    };
     let total = files.len();
     progress(Progress { phase: "lecture".into(), done: 0, total });
     let done = AtomicUsize::new(0);
@@ -129,11 +132,13 @@ pub fn run(
     progress(Progress { phase: "sauvegarde".into(), done: 0, total: 1 });
     {
         let mut dbg = db.lock();
-        if let Err(e) = dbg.save_batch(&changed, &analyzed) {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+        let batch = dbg.start_import(now, &label).unwrap_or(0);
+        res.batch = batch;
+        if let Err(e) = dbg.save_batch(&changed, &analyzed, batch) {
             res.errors.push(format!("base de données : {e}"));
         }
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
-        let _ = dbg.log_import(now, res.sources as i64, res.hands as i64, res.imported as i64, res.duplicates as i64, res.invalid as i64, "ok");
+        let _ = dbg.finish_import(batch, res.sources as i64, res.hands as i64, res.imported as i64, res.duplicates as i64, res.invalid as i64, "ok");
     }
     let mut hands: Vec<(Hand, HandFacts)> = std::mem::take(&mut st.hands).into_iter().map(|r| (r.h, r.f)).collect();
     hands.extend(analyzed);

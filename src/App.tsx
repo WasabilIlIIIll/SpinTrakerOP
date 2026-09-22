@@ -42,9 +42,7 @@ export function App() {
     <div className={cls("app", prefs.sidebarCollapsed && "collapsed")}>
       <aside className="side">
         <div className="brand">
-          <span className="brand-ic">
-            <Icon name="spade" size={18} />
-          </span>
+          <img className="brand-ic" src="/logo.png" alt="" />
           <span className="brand-t">
             Spin Tracker <b>OP</b>
           </span>

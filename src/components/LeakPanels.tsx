@@ -45,6 +45,7 @@ export function NodeCard({ node, onMatrix }: { node: NodeOut; onMatrix?: (n: Nod
     <div className="lk-node">
       <div className="lk-nh">
         <span>{node.label}</span>
+        {node.ref_total > 0 && <span className="lk-ref" title="Taille de l'échantillon de référence">réf. {node.ref_total >= 1000 ? `${num(node.ref_total / 1000, 1)}k` : node.ref_total}</span>}
         {onMatrix && Object.keys(node.matrix).length > 0 && (
           <button className="icon-btn" title="Voir la grille de mains" onClick={() => onMatrix(node)}>
             <Icon name="layers" size={14} />
@@ -235,6 +236,28 @@ export function PostflopTable({ mine, reference }: { mine: Post[]; reference: Po
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/** Explique d'où viennent les références et comment l'écart est jugé. */
+export function RefSources({ mode, tagName }: { mode: string; tagName?: string }) {
+  const src =
+    mode === "population"
+      ? "tous les autres joueurs présents dans vos historiques, dans la même situation et la même tranche de tapis"
+      : mode.startsWith("tag:")
+        ? `les joueurs portant le tag « ${tagName ?? mode.slice(4)} », dans la même situation et la même tranche de tapis`
+        : mode === "custom"
+          ? "vos propres cibles, saisies dans Paramètres → Références (par exemple issues d'un solveur)"
+          : "aucune (affichage des fréquences brutes)";
+  return (
+    <div className="ref-src">
+      <Icon name="info" size={14} />
+      <div>
+        <b>Référence : {src}.</b> Spin Tracker OP ne contient aucune solution GTO : les comparaisons sont statistiques, calculées sur vos propres données.
+        Un écart est signalé quand il dépasse la tolérance <code>4 % + 40/√n</code> (n = taille de votre échantillon), et en rouge au-delà de 2,2 fois cette
+        tolérance ; en dessous de 8 décisions, la case reste grise.
+      </div>
     </div>
   );
 }

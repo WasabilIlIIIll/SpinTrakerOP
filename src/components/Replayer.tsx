@@ -3,7 +3,7 @@ import { api, type HandDetail } from "../lib/api";
 import { useApp, useQuery } from "../lib/state";
 import { PlayingCard } from "./PlayingCard";
 import { Icon } from "./Icon";
-import { Loading, Seg, Tags, Toggle } from "./ui";
+import { Help, Loading, Seg, Tags, Toggle } from "./ui";
 import { cls, date, mult, num, signed, tone } from "../lib/format";
 import { t } from "../lib/i18n";
 
@@ -116,7 +116,7 @@ function buildSteps(h: HandDetail, fmt: (v: number) => string): Step[] {
 }
 
 export function Replayer({ id, onNav }: { id: string; onNav?: (id: string) => void }) {
-  const { prefs, setPrefs, open } = useApp();
+  const { prefs, setPrefs, open, bump, toast } = useApp();
   const { data: h } = useQuery(["hand", id], () => api.handDetail(id));
   const [inBB, setInBB] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -174,6 +174,17 @@ export function Replayer({ id, onNav }: { id: string; onNav?: (id: string) => vo
           </span>
         </div>
         <div className="row gap8">
+          <button
+            className={cls("star", h.fav && "on")}
+            title={h.fav ? "Retirer des favoris" : "Ajouter aux favoris (onglet Review)"}
+            onClick={async () => {
+              await api.setFavorite(h.id, !h.fav);
+              bump();
+              toast(h.fav ? "Retirée des favoris" : "Main ajoutée aux favoris");
+            }}
+          >
+            <Icon name="star" size={16} fill={h.fav} />
+          </button>
           <Toggle on={inBB} onChange={setInBB} label="en BB" />
           <Toggle on={showAll} onChange={setShowAll} label="Cartes visibles" />
           <button className="btn btn-ghost btn-sm" onClick={() => open({ type: "tournament", id: h.tid })}>
@@ -278,18 +289,20 @@ export function Replayer({ id, onNav }: { id: string; onNav?: (id: string) => vo
       </div>
       <div className="rp-summary">
         <div>
-          <span className="muted">Résultat</span>
+          <span className="muted">Résultat réel</span>
           <b className={tone(heroSeat.net)}>{signed(heroSeat.net, 0)} chips</b>
+        </div>
+        <div>
+          <span className="muted">
+            CEV de la main <Help text="Jetons gagnés en tenant compte de l'équité au moment du tapis (all-in ajusté). Identique au résultat réel s'il n'y a pas eu de tapis avant la river. C'est bien une valeur en JETONS, pas en euros." />
+          </span>
+          <b className={tone(heroSeat.ev)}>{signed(heroSeat.ev, 0)} chips</b>
         </div>
         {allin && (
           <div>
-            <span className="muted">EV all-in</span>
-            <b className={tone(heroSeat.ev)}>{signed(heroSeat.ev, 0)} chips</b>
-          </div>
-        )}
-        {allin && (
-          <div>
-            <span className="muted">Chance</span>
+            <span className="muted">
+              Écart réel − CEV <Help text="Positif : vous avez gagné plus de jetons que votre espérance sur ce tapis. Négatif : moins." />
+            </span>
             <b className={tone(heroSeat.net - heroSeat.ev)}>{signed(heroSeat.net - heroSeat.ev, 0)}</b>
           </div>
         )}

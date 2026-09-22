@@ -221,6 +221,8 @@ export interface HandRow {
   players: number;
   line: string;
   showdown: boolean;
+  fav: boolean;
+  fav_note: string;
 }
 
 export interface HandDetail {
@@ -254,6 +256,8 @@ export interface HandDetail {
   count: number;
   prev: string | null;
   next: string | null;
+  fav: boolean;
+  fav_note: string;
   tournament: { id: string; name: string; multiplier: number; buyin: number; place: number; prize_pool: number };
 }
 
@@ -309,6 +313,10 @@ export interface PlayerRow {
   hero_ev_profit_vs: number;
   hero_wins_vs: number;
   their_wins_vs: number;
+  hu_matches: number;
+  hero_profit_hu_vs: number;
+  cev_hu_vs: number;
+  chips_hu_vs: number;
   last_ts: number;
   first_ts: number;
   is_hero: boolean;
@@ -316,7 +324,6 @@ export interface PlayerRow {
 
 export interface PlayerProfile extends PlayerRow {
   together: { id: string; start: number; multiplier: number; place: number; profit: number; ev: number; chips: number; buyin: number }[];
-  hu_matches: number;
   hero_cev_hu_vs: number;
   hero_cev_hu_vs_ci: number;
   hero_cev_vs_ci: number;
@@ -437,6 +444,20 @@ export interface ImportResult {
   tournaments: number;
   errors: string[];
   millis: number;
+  batch: number;
+}
+
+export interface ImportRow {
+  id: number;
+  ts: number;
+  sources: number;
+  hands: number;
+  imported: number;
+  duplicates: number;
+  invalid: number;
+  status: string;
+  label: string;
+  remaining: number;
 }
 
 export interface TagsOverviewRow {
@@ -488,7 +509,9 @@ export const api = {
   challenges: (now: number) => call<ChallengeView[]>("challenges_list", { now }),
   saveChallenge: (challenge: Challenge) => call<number>("save_challenge", { challenge }),
   deleteChallenge: (id: number) => call<void>("delete_challenge", { id }),
-  imports: () => call<{ ts: number; sources: number; hands: number; imported: number; duplicates: number; invalid: number; status: string }[]>("imports_history"),
+  imports: () => call<ImportRow[]>("imports_history"),
+  deleteImport: (id: number) => call<{ hands: number; tournaments: number }>("delete_import", { id }),
+  setFavorite: (id: string, on: boolean, note?: string) => call<void>("set_favorite", { id, on, note }),
   wipe: () => call<void>("wipe_database"),
   backup: (path: string) => call<void>("backup_database", { path }),
   exportCsv: (filter: Filter, path: string) => call<number>("export_csv", { filter, path }),

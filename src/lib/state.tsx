@@ -34,6 +34,7 @@ export interface UiPrefs {
   includeBankrollStart: boolean;
   dashboardTab: string;
   page: string;
+  eventsLayout: "vedette" | "compact" | "liste";
 }
 
 export const ALL_KPIS = ["tournaments", "cev", "rakeback", "profit", "roi", "hourly", "time", "luck", "finish", "avg_buyin", "spins_h", "min_cev"];
@@ -69,6 +70,7 @@ export const DEFAULT_PREFS: UiPrefs = {
   includeBankrollStart: false,
   dashboardTab: "chips",
   page: "dashboard",
+  eventsLayout: "vedette",
 };
 
 interface Ctx {

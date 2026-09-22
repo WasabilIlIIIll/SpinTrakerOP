@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { api } from "../lib/api";
 import { useApp, useQuery } from "../lib/state";
-import { Btn, Empty, Loading, Pager, Panel, Seg } from "../components/ui";
+import { Btn, Empty, Help, Loading, Pager, Panel, Seg } from "../components/ui";
+import { Icon } from "../components/Icon";
 import { FilterBar } from "../components/FilterBar";
 import { Cards } from "../components/PlayingCard";
 import { cls, date, num, signed, tone } from "../lib/format";
@@ -9,13 +10,14 @@ import { cls, date, num, signed, tone } from "../lib/format";
 const SCENARIOS = ["BTN", "SB vs BTN", "SB vs BB", "BB vs BTN", "BB vs SB", "HU SB", "HU BB"];
 
 export function Hands() {
-  const { filter, open } = useApp();
+  const { filter, open, bump, toast } = useApp();
   const [scenario, setScenario] = useState<string | null>(null);
   const [allin, setAllin] = useState<boolean | null>(null);
   const [showdown, setShowdown] = useState<boolean | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [hu, setHu] = useState<boolean | null>(null);
   const [combo, setCombo] = useState("");
+  const [favorites, setFavorites] = useState<boolean | null>(null);
   const [minPot, setMinPot] = useState<number | null>(null);
   const [sort, setSort] = useState("date");
   const [desc, setDesc] = useState(true);
@@ -28,6 +30,7 @@ export function Hands() {
     showdown,
     result,
     hu,
+    favorites,
     combo: combo.trim().toUpperCase() || null,
     min_pot_bb: minPot,
     sort,
@@ -44,7 +47,13 @@ export function Hands() {
     }
     setOffset(0);
   };
+  const star = async (id: string, on: boolean) => {
+    await api.setFavorite(id, on);
+    bump();
+    toast(on ? "Main ajoutée aux favoris" : "Retirée des favoris");
+  };
   const reset = () => {
+    setFavorites(null);
     setScenario(null);
     setAllin(null);
     setShowdown(null);
@@ -73,6 +82,12 @@ export function Hands() {
         <Seg small value={showdown === null ? "" : showdown ? "y" : "n"} onChange={(v) => setShowdown(v === "" ? null : v === "y")} options={[{ v: "", l: "Tout" }, { v: "y", l: "Showdown" }, { v: "n", l: "Sans SD" }]} />
         <Seg small value={result ?? ""} onChange={(v) => setResult(v || null)} options={[{ v: "", l: "Tout" }, { v: "won", l: "Gagnées" }, { v: "lost", l: "Perdues" }]} />
         <Seg small value={hu === null ? "" : hu ? "y" : "n"} onChange={(v) => setHu(v === "" ? null : v === "y")} options={[{ v: "", l: "3-max + HU" }, { v: "y", l: "HU" }, { v: "n", l: "3-max" }]} />
+        <Seg
+          small
+          value={favorites === null ? "" : favorites ? "y" : "n"}
+          onChange={(v) => (setFavorites(v === "" ? null : v === "y"), setOffset(0))}
+          options={[{ v: "", l: "Toutes" }, { v: "y", l: "★ Review" }]}
+        />
         <input className="inp" placeholder="Main (AKs, 77…)" value={combo} onChange={(e) => (setCombo(e.target.value), setOffset(0))} style={{ width: 120 }} />
         <input className="inp" placeholder="Pot min (bb)" value={minPot ?? ""} onChange={(e) => setMinPot(e.target.value ? +e.target.value : null)} style={{ width: 110 }} />
         <Btn small icon="refresh" onClick={reset}>
@@ -82,7 +97,7 @@ export function Hands() {
         {data && (
           <div className="hand-sum">
             <span>
-              {num(data.total)} mains · chips <b className={tone(data.net)}>{signed(data.net, 0)}</b> · EV <b className={tone(data.ev)}>{signed(data.ev, 0)}</b>
+              {num(data.total)} mains · chips réels <b className={tone(data.net)}>{signed(data.net, 0)}</b> · CEV <b className={tone(data.ev)}>{signed(data.ev, 0)}</b>
             </span>
           </div>
         )}
@@ -97,6 +112,7 @@ export function Hands() {
             <table className="tbl hover">
               <thead>
                 <tr>
+                  <th />
                   <th className="sortable" onClick={() => click("date")}>
                     Date {sort === "date" ? (desc ? "↓" : "↑") : ""}
                   </th>
@@ -115,16 +131,28 @@ export function Hands() {
                     Chips
                   </th>
                   <th className="r sortable" onClick={() => click("ev")}>
-                    EV
+                    CEV <Help text="Résultat de la main en jetons, all-in ajusté : sur un tapis avant la river, le résultat réel est remplacé par l'espérance (équité × pot). Ce n'est pas un montant en euros." />
                   </th>
                   <th className="r sortable" onClick={() => click("luck")}>
-                    Chance
+                    Écart <Help text="Chips réels − CEV : positif = vous avez gagné plus que votre espérance sur les tapis de cette main." />
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {data.rows.map((h) => (
                   <tr key={h.id} onClick={() => open({ type: "hand", id: h.id })}>
+                    <td>
+                      <button
+                        className={cls("star", h.fav && "on")}
+                        title={h.fav ? "Retirer des favoris" : "Ajouter aux favoris (Review)"}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          star(h.id, !h.fav);
+                        }}
+                      >
+                        <Icon name="star" size={14} fill={h.fav} />
+                      </button>
+                    </td>
                     <td className="muted">{date(h.ts, true)}</td>
                     <td>
                       <Cards cards={h.cards} size="xs" />
@@ -138,7 +166,7 @@ export function Hands() {
                     <td className="r">{num(h.pot / h.bb, 1)} bb</td>
                     <td className="r">{h.equity != null ? `${num(h.equity * 100, 0)} %` : ""}</td>
                     <td className={cls("r", tone(h.net))}>{signed(h.net, 0)}</td>
-                    <td className={cls("r", tone(h.ev))}>{h.allin != null ? signed(h.ev, 0) : ""}</td>
+                    <td className={cls("r", tone(h.ev))}>{signed(h.ev, 0)}</td>
                     <td className={cls("r", tone(h.net - h.ev))}>{h.allin != null ? signed(h.net - h.ev, 0) : ""}</td>
                   </tr>
                 ))}

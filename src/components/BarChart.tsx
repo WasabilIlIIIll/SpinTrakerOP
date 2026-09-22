@@ -92,7 +92,13 @@ export function BarChart({ categories, groups, height = 300, fmt = (v) => num(v,
                         <line x1={x0 + (bw - 4) / 2 - 5} x2={x0 + (bw - 4) / 2 + 5} y1={y(v - ci)} y2={y(v - ci)} />
                       </g>
                     )}
-                    <text x={x0 + (bw - 4) / 2} y={v >= 0 ? y(v + ci) - 6 : y(v - ci) + 14} textAnchor="middle" className="bc-val" fill={g.color}>
+                    <text
+                      x={x0 + (bw - 4) / 2}
+                      y={v >= 0 ? Math.max(padT - 4, y(v + ci) - 6) : Math.min(height - padB - 3, y(v - ci) + 14)}
+                      textAnchor="middle"
+                      className="bc-val"
+                      fill={g.color}
+                    >
                       {fmt(v)}
                     </text>
                   </g>

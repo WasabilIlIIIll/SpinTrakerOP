@@ -27,7 +27,7 @@ Application de bureau, 100 % hors ligne, vos données restent chez vous.
 | **Joueurs** | Base d'adversaires complète : VPIP, PFR, limp BTN, 3-bet, AF, WTSD… votre CEV contre eux, le leur contre vous, dernière rencontre, notes libres. |
 | **Tags automatiques** | Constructeur de règles (« ≥ 50 mains **et** limp BTN ≤ 5 % » → Reg). Les tags alimentent les profils de table et les références du leak finder. |
 | **Leak finder** | Arbre complet de vos décisions préflop par position, situation et tranche de tapis, avec grille 13×13 des mains jouées, et comparaison à la population, aux regs ou à vos propres cibles. Stats postflop (c-bet, fold vs c-bet, check-raise, barrel, WTSD…). |
-| **Replayer** | Rejouez chaque main sur une table animée : cartes, tapis, mises, équité au tapis, EV vs résultat réel, navigation au clavier. |
+| **Replayer & Review** | Rejouez chaque main sur une table animée : cartes, tapis, mises, équité au tapis, CEV vs résultat réel. Marquez une main d'une étoile pour la retrouver dans l'onglet Review. |
 | **Challenges** | Objectifs de volume, d'heures, de profit, de rakeback, de CEV ou de bankroll sur une période, avec rythme requis et suivi quotidien. |
 | **Personnalisation** | 5 thèmes poker, couleur d'accent libre, couleurs de courbes, densité, taille du texte, indicateurs du tableau de bord réordonnables, mode discret (floutage), français / anglais. |
 
@@ -54,7 +54,11 @@ npm run bundle     # génère l'installeur dans src-tauri/target/release/bundle
 ## Import des historiques
 
 Import **manuel** : glissez-déposez des fichiers, des dossiers entiers ou des `.zip` dans
-l'onglet Import (ou utilisez les boutons). Les doublons sont détectés et ignorés.
+l'onglet Import (ou utilisez les boutons). Chaque main porte un identifiant unique : réimporter
+le même dossier tous les jours ne crée **aucun doublon**, les mains déjà connues sont ignorées.
+
+Chaque import forme un lot listé dans l'historique, avec une **corbeille** : supprimer un import
+retire uniquement les mains qu'il avait apportées (et les tournois devenus vides).
 
 | Room | Format | Statut |
 |---|---|---|
