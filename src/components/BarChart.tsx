@@ -49,7 +49,8 @@ export function BarChart({ categories, groups, height = 300, fmt = (v) => num(v,
   lo = Math.floor(lo / step) * step;
   hi = Math.ceil(hi / step) * step;
   const padL = 46;
-  const padB = sub ? 44 : 30;
+  const hasNeg = groups.some((g) => g.values.some((v) => v < 0));
+  const padB = (sub ? 44 : 30) + (hasNeg ? 12 : 0);
   const padT = 22;
   const ih = height - padB - padT;
   const iw = Math.max(50, w - padL - 8);

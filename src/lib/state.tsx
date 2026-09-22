@@ -14,12 +14,12 @@ export interface UiPrefs {
   radius: number;
   fourColor: boolean;
   animations: boolean;
-  pattern: "suits" | "none";
   kpis: string[];
   kpiModes: Record<string, number>;
   privacy: Record<string, boolean>;
   sidebarCollapsed: boolean;
   chartColors: Record<string, string>;
+  themeVars: Record<string, string>;
   chipsSeries: string[];
   bankrollSeries: string[];
   chipsAxis: "hands" | "tournaments" | "date";
@@ -29,7 +29,7 @@ export interface UiPrefs {
   statsSections: string[];
   savedFilters: { name: string; filter: Filter }[];
   showCi: boolean;
-  showMinCev: boolean;
+  showNotes: boolean;
   smoothMulti: boolean;
   includeBankrollStart: boolean;
   dashboardTab: string;
@@ -40,7 +40,7 @@ export const ALL_KPIS = ["tournaments", "cev", "rakeback", "profit", "roi", "hou
 export const ALL_STATS_SECTIONS = ["tiles", "position", "results", "profile", "multitabling", "finishers", "multipliers", "stack", "hours", "weekdays"];
 
 export const DEFAULT_PREFS: UiPrefs = {
-  theme: "highroller",
+  theme: "clair",
   accent: null,
   lang: "fr",
   currency: "€",
@@ -49,12 +49,12 @@ export const DEFAULT_PREFS: UiPrefs = {
   radius: 12,
   fourColor: true,
   animations: true,
-  pattern: "suits",
   kpis: ["tournaments", "cev", "rakeback", "profit"],
   kpiModes: {},
   privacy: {},
   sidebarCollapsed: false,
   chartColors: {},
+  themeVars: {},
   chipsSeries: ["chips", "chips_sd", "chips_nsd", "ev", "min_cev"],
   bankrollSeries: ["real_rb", "ev", "ev_multi", "ev_eff"],
   chipsAxis: "hands",
@@ -64,7 +64,7 @@ export const DEFAULT_PREFS: UiPrefs = {
   statsSections: ALL_STATS_SECTIONS,
   savedFilters: [],
   showCi: true,
-  showMinCev: true,
+  showNotes: true,
   smoothMulti: false,
   includeBankrollStart: false,
   dashboardTab: "chips",
@@ -127,7 +127,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .then((s) => {
         if (s) {
           try {
-            const p = { ...DEFAULT_PREFS, ...JSON.parse(s) };
+            const raw = JSON.parse(s);
+            // migration des anciens identifiants de thème
+            const map: Record<string, string> = { highroller: "nuit", ivory: "clair", felt: "tapis", royal: "vegas" };
+            if (raw.theme && map[raw.theme]) raw.theme = map[raw.theme];
+            const p = { ...DEFAULT_PREFS, ...raw };
             setPrefsState(p);
           } catch {
             /* préférences corrompues : valeurs par défaut */
@@ -148,7 +152,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    applyTheme(prefs.theme, prefs.accent, prefs.chartColors);
+    if (prefs.theme !== "auto") return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const h = () => applyTheme(prefs.theme, prefs.accent, { ...prefs.themeVars, ...prefs.chartColors });
+    mq.addEventListener("change", h);
+    return () => mq.removeEventListener("change", h);
+  }, [prefs]);
+
+  useEffect(() => {
+    applyTheme(prefs.theme, prefs.accent, { ...prefs.themeVars, ...prefs.chartColors });
     setLang(prefs.lang);
     setFormatPrefs(prefs.currency, prefs.lang === "fr" ? "fr-FR" : "en-US");
     const root = document.documentElement;
@@ -156,7 +168,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     root.style.fontSize = `${14 * prefs.fontScale}px`;
     root.dataset.density = prefs.density;
     root.dataset.anim = prefs.animations ? "on" : "off";
-    root.dataset.pattern = prefs.pattern;
   }, [prefs]);
 
   // attente du chargement de la base

@@ -37,6 +37,12 @@ export function StatsTab() {
   return (
     <div className="stats">
       {sec.includes("tiles") && s && (
+        <div className="row gap8" style={{ justifyContent: "flex-end" }}>
+          <span className="muted small">Mesure affichée</span>
+          <Seg small value={mode} onChange={setMode} options={EV_MODES.map((m) => ({ v: m.v, l: m.l }))} />
+        </div>
+      )}
+      {sec.includes("tiles") && s && (
         <div className="tiles">
           <Stat label={t("Buy-in moyen")} value={money(s.avg_buyin)} />
           <Stat label={t("Temps joué")} value={duration(s.seconds)} sub={`${num(s.avg_tables, 1)} tables en moyenne`} />
@@ -63,9 +69,6 @@ export function StatsTab() {
             tone={tone(s.hourly[mode])}
             k="profit"
           />
-          <div className="tiles-mode">
-            <Seg small value={mode} onChange={setMode} options={EV_MODES.map((m) => ({ v: m.v, l: m.l }))} />
-          </div>
         </div>
       )}
       <div className="stats-grid">

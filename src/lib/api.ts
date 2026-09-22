@@ -15,6 +15,17 @@ export interface Filter {
   opponent?: string | null;
   hours?: number[];
   weekdays?: number[];
+  scenarios?: string[];
+}
+
+export interface ChartNote {
+  kind: string;
+  label: string;
+  x: number;
+  y: number;
+  x2?: number | null;
+  y2?: number | null;
+  series: string;
 }
 
 export interface Profits {
@@ -77,6 +88,7 @@ export interface ChipsChart {
   cev_ci: number;
   min_cev: number;
   hands: number;
+  notes: ChartNote[];
 }
 
 export interface Swing {
@@ -118,6 +130,7 @@ export interface BankrollChart {
   };
   start: number;
   transactions: number;
+  notes: ChartNote[];
 }
 
 export interface Bar {

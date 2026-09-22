@@ -27,6 +27,8 @@ pub struct Filter {
     pub opponent: Option<String>,
     pub hours: Vec<u8>,
     pub weekdays: Vec<u8>,
+    /// filtre au niveau des mains (scénarios de position), appliqué aux séries de jetons
+    pub scenarios: Vec<String>,
 }
 
 impl Filter {

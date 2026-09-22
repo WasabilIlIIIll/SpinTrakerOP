@@ -50,7 +50,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            let dir = app.path().app_data_dir().unwrap_or_else(|_| PathBuf::from("."));
+            // SPINOP_DATA_DIR permet un mode portable (clé USB) ou une base de test.
+            let dir = match std::env::var("SPINOP_DATA_DIR") {
+                Ok(d) => PathBuf::from(d),
+                Err(_) => app.path().app_data_dir().unwrap_or_else(|_| PathBuf::from(".")),
+            };
             let state = open_state(&dir).map_err(|e| Box::<dyn std::error::Error>::from(e))?;
             let (store, dbc, ready) = (state.store.clone(), state.db.clone(), state.ready.clone());
             app.manage(state);

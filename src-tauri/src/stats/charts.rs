@@ -13,8 +13,22 @@ pub struct ChipsChart {
     pub cev: f64,
     pub cev_ci: f64,
     pub min_cev: f64,
-    /// abscisse (dans l'unité choisie) de chaque fin de tournoi, pour la ligne CEV min
     pub hands: usize,
+    /// annotations à tracer sur la courbe
+    pub notes: Vec<Note>,
+}
+
+/// Annotation positionnée sur une courbe.
+#[derive(Serialize, Default, Clone)]
+pub struct Note {
+    pub kind: String,
+    pub label: String,
+    pub x: f64,
+    pub y: f64,
+    /// segment optionnel (début de swing / de période)
+    pub x2: Option<f64>,
+    pub y2: Option<f64>,
+    pub series: String,
 }
 
 /// Réduit à ~`max` points en conservant min/max de la série de référence par tranche.
@@ -69,12 +83,16 @@ pub fn chips_chart(s: &Store, filter: &Filter, axis: &str, max_points: usize) ->
     let (mut c, mut a, mut b, mut e, mut h3, mut h2) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
     let mut hand_count = 0usize;
     let mut tcount = 0usize;
+    let scen: Vec<&str> = filter.scenarios.iter().map(|x| x.as_str()).collect();
     for &ti in &sel {
         let t = &s.tours[ti];
         let nh = t.hands.len().max(1);
         for (k, &hi) in t.hands.iter().enumerate() {
             let r = &s.hands[hi];
             let pf = &r.f.players[r.h.hero as usize];
+            if !scen.is_empty() && !scen.contains(&pf.scenario.label()) {
+                continue;
+            }
             c += pf.net;
             e += pf.ev;
             if r.f.showdown && !pf.folded {
@@ -116,6 +134,7 @@ pub fn chips_chart(s: &Store, filter: &Filter, axis: &str, max_points: usize) ->
     if axis == "date" && x.len() > 1 {
         x[0] = x[1] - 1.0;
     }
+    let notes = build_notes(&x, &chips, "chips", |v| format!("{:+.0} chips", v), "spins");
     let idx = downsample_idx(&chips, max_points);
     let pick = |v: &Vec<f64>| idx.iter().map(|&i| v[i]).collect::<Vec<f64>>();
     ChipsChart {
@@ -136,7 +155,73 @@ pub fn chips_chart(s: &Store, filter: &Filter, axis: &str, max_points: usize) ->
         cev_ci: sum.cev_ci,
         min_cev: sum.min_cev,
         hands: hand_count,
+        notes,
     }
+}
+
+/// Points remarquables d'une courbe : sommet, creux, plus gros downswing, plus longue
+/// période sans nouveau sommet.
+pub fn build_notes(x: &[f64], v: &[f64], series: &str, fmt: impl Fn(f64) -> String, unit: &str) -> Vec<Note> {
+    let mut out = Vec::new();
+    if v.len() < 3 {
+        return out;
+    }
+    let (mut pk, mut lw) = (0usize, 0usize);
+    let (mut hi_i, mut down) = (0usize, (0.0f64, 0usize, 0usize));
+    let (mut peak_i, mut be) = (0usize, (0usize, 0usize));
+    for i in 0..v.len() {
+        if v[i] > v[pk] {
+            pk = i;
+        }
+        if v[i] < v[lw] {
+            lw = i;
+        }
+        if v[i] > v[hi_i] {
+            hi_i = i;
+        }
+        if v[hi_i] - v[i] > down.0 {
+            down = (v[hi_i] - v[i], hi_i, i);
+        }
+        if v[i] > v[peak_i] + 1e-9 {
+            if i - peak_i > be.1 - be.0 {
+                be = (peak_i, i);
+            }
+            peak_i = i;
+        }
+    }
+    let last = v.len() - 1;
+    if last - peak_i > be.1 - be.0 {
+        be = (peak_i, last);
+    }
+    if v[pk] > 0.0 {
+        out.push(Note { kind: "peak".into(), label: format!("Plus haut {}", fmt(v[pk])), x: x[pk], y: v[pk], x2: None, y2: None, series: series.into() });
+    }
+    if v[lw] < 0.0 {
+        out.push(Note { kind: "low".into(), label: format!("Plus bas {}", fmt(v[lw])), x: x[lw], y: v[lw], x2: None, y2: None, series: series.into() });
+    }
+    if down.0 > 0.0 {
+        out.push(Note {
+            kind: "downswing".into(),
+            label: format!("Downswing {}", fmt(-down.0)),
+            x: x[down.2],
+            y: v[down.2],
+            x2: Some(x[down.1]),
+            y2: Some(v[down.1]),
+            series: series.into(),
+        });
+    }
+    if be.1 > be.0 {
+        out.push(Note {
+            kind: "breakeven".into(),
+            label: format!("{} {} break-even", (x[be.1] - x[be.0]).round() as i64, unit),
+            x: x[be.1],
+            y: v[be.1],
+            x2: Some(x[be.0]),
+            y2: Some(v[be.0]),
+            series: series.into(),
+        });
+    }
+    out
 }
 
 #[derive(Serialize, Default)]
@@ -184,6 +269,7 @@ pub struct BankrollChart {
     pub events: Events,
     pub start: f64,
     pub transactions: f64,
+    pub notes: Vec<Note>,
 }
 
 fn swings(v: &[f64], ts: &[i64]) -> (Swing, Swing, Swing) {
@@ -288,6 +374,26 @@ pub fn bankroll_chart(s: &Store, filter: &Filter, axis: &str) -> BankrollChart {
     let best_day = days.iter().max_by(|a, b| a.1.partial_cmp(b.1).unwrap()).map(|(d, v)| (*d * 86400, *v)).unwrap_or_default();
     let worst_day = days.iter().min_by(|a, b| a.1.partial_cmp(b.1).unwrap()).map(|(d, v)| (*d * 86400, *v)).unwrap_or_default();
     let tx: f64 = s.settings.transactions.iter().map(|t| t.amount).sum();
+    let bi = sel.first().map(|&i| s.tours[i].t.buyin).unwrap_or(1.0).max(0.01);
+    let mut notes = build_notes(&x, &series[1], "real_rb", |v| format!("{v:+.0} €"), "Spin");
+    for n in notes.iter_mut() {
+        if n.kind == "downswing" {
+            if let Some(y2) = n.y2 {
+                n.label = format!("Downswing {:.0} BI ({:+.0} €)", (n.y - y2) / bi, n.y - y2);
+            }
+        }
+    }
+    for j in &jackpots {
+        notes.push(Note {
+            kind: "jackpot".into(),
+            label: format!("Jackpot x{:.0} ({:+.0} €)", j.mult, j.won - bi),
+            x: if axis == "date" { j.ts as f64 } else { j.index as f64 },
+            y: series[1].get(j.index).copied().unwrap_or(0.0),
+            x2: None,
+            y2: None,
+            series: "real_rb".into(),
+        });
+    }
     BankrollChart {
         x,
         ts: tss,
@@ -309,5 +415,6 @@ pub fn bankroll_chart(s: &Store, filter: &Filter, axis: &str) -> BankrollChart {
         },
         start: s.settings.bankroll_start,
         transactions: tx,
+        notes,
     }
 }

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { api } from "../lib/api";
 import { useApp, useQuery } from "../lib/state";
 import { KpiRow } from "../components/KpiRow";
@@ -11,6 +12,7 @@ export function Dashboard() {
   const { filter, prefs, setPrefs, overview, go } = useApp();
   const { data: s } = useQuery(["summary", filter], () => api.summary(filter));
   const tab = prefs.dashboardTab;
+  const [full, setFull] = useState(false);
   if (overview && overview.tournaments === 0) {
     return (
       <div className="page">
@@ -29,7 +31,7 @@ export function Dashboard() {
   }
   return (
     <div className="page">
-      <KpiRow s={s} />
+      {!full && <KpiRow s={s} />}
       <div className="tabs-row">
         <Seg
           value={tab}
@@ -41,8 +43,8 @@ export function Dashboard() {
           ]}
         />
       </div>
-      {tab === "chips" && <ChipsTab />}
-      {tab === "bankroll" && <BankrollTab />}
+      {tab === "chips" && <ChipsTab full={full} onFull={() => setFull(!full)} />}
+      {tab === "bankroll" && <BankrollTab full={full} onFull={() => setFull(!full)} />}
       {tab === "stats" && <StatsTab />}
     </div>
   );

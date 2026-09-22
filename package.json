@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "app": "tauri dev",
-    "bundle": "tauri build"
+    "bundle": "tauri build",
+    "icons": "tauri icon app-icon.svg -o src-tauri/icons && node -e \"require('fs').copyFileSync('src-tauri/icons/128x128.png','public/icon.png')\""
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

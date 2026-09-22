@@ -14,12 +14,22 @@ interface Mode {
   sub?: ReactNode;
 }
 
+/** Loi normale : P(Z <= z) (approximation d'Abramowitz-Stegun, erreur < 1e-7). */
+function phi(z: number): number {
+  const t = 1 / (1 + 0.2316419 * Math.abs(z));
+  const d = 0.3989423 * Math.exp((-z * z) / 2);
+  const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+  return z > 0 ? 1 - p : p;
+}
+
 export function luckLabel(z: number): { label: string; sub: string; tone: string; icon: string } {
-  if (z <= -2) return { label: t("Très malchanceux"), sub: "Run très bad (z " + num(z, 1) + ")", tone: "neg", icon: "thumbdown" };
-  if (z <= -1) return { label: t("Malchanceux"), sub: "Sous l'EV (z " + num(z, 1) + ")", tone: "neg", icon: "thumbdown" };
-  if (z < 1) return { label: t("Neutre"), sub: "Chance normale (z " + num(z, 1) + ")", tone: "", icon: "thumbup" };
-  if (z < 2) return { label: t("Chanceux"), sub: "Au-dessus de l'EV (z " + num(z, 1) + ")", tone: "pos", icon: "thumbup" };
-  return { label: t("Très chanceux"), sub: "Run very good (z " + num(z, 1) + ")", tone: "pos", icon: "sparkle" };
+  const pct = phi(z) * 100;
+  const top = (v: number) => `Top ${num(Math.max(1, Math.min(99, v)), 0)} %`;
+  if (z <= -2) return { label: t("Très malchanceux"), sub: `${top(100 - pct)} des pires runs`, tone: "neg", icon: "thumbdown" };
+  if (z <= -1) return { label: t("Malchanceux"), sub: `${top(100 - pct)} des pires runs`, tone: "neg", icon: "thumbdown" };
+  if (z < 1) return { label: t("Neutre"), sub: "Chance normale", tone: "", icon: "thumbup" };
+  if (z < 2) return { label: t("Chanceux"), sub: top(100 - pct), tone: "pos", icon: "thumbup" };
+  return { label: t("Très chanceux"), sub: top(100 - pct), tone: "pos", icon: "sparkle" };
 }
 
 function modesFor(k: string, s: Summary): { title: string; modes: Mode[] } {

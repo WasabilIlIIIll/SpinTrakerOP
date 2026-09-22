@@ -12,7 +12,6 @@ export interface LineSeries {
   values: number[];
   width?: number;
   dash?: number[];
-  fill?: boolean;
 }
 
 export interface CiBar {
@@ -21,6 +20,16 @@ export interface CiBar {
   loLabel: string;
   hiLabel: string;
   color: string;
+}
+
+export interface Note {
+  kind: string;
+  label: string;
+  x: number;
+  y: number;
+  x2?: number | null;
+  y2?: number | null;
+  series: string;
 }
 
 interface Props {
@@ -32,7 +41,7 @@ interface Props {
   fmtY?: (v: number) => string;
   xLabel?: string;
   yLabel?: string;
-  marks?: { x: number; label: string; color: string }[];
+  notes?: Note[];
   onPick?: (x: number) => void;
 }
 
@@ -40,10 +49,9 @@ function resolve(c: string) {
   return c.startsWith("--") ? cssVar(c) || "#888" : c;
 }
 
-export function LineChart({ x, series, dateAxis, height, ci, fmtY = compact, xLabel, yLabel, marks, onPick }: Props) {
+export function LineChart({ x, series, dateAxis, height, ci, fmtY = compact, xLabel, yLabel, notes, onPick }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const tip = useRef<HTMLDivElement>(null);
-  const plot = useRef<uPlot | null>(null);
   const { prefs } = useApp();
   const pickRef = useRef(onPick);
   pickRef.current = onPick;
@@ -51,13 +59,18 @@ export function LineChart({ x, series, dateAxis, height, ci, fmtY = compact, xLa
   useEffect(() => {
     const el = wrap.current;
     if (!el) return;
-    const grid = cssVar("--border");
+    const dpr = devicePixelRatio || 1;
+    const line = cssVar("--line") || "#8882";
     const muted = cssVar("--muted");
     const text = cssVar("--text");
-    const font = `12px ${getComputedStyle(document.body).fontFamily}`;
+    const faint = cssVar("--faint");
+    const family = getComputedStyle(document.body).fontFamily;
+    const font = `12px ${family}`;
     const colors = series.map((s) => resolve(s.color));
     const w = el.clientWidth || 800;
     const h = height ?? (el.clientHeight || 420);
+    const visibleNotes = (notes ?? []).filter((n) => series.some((s) => s.key === n.series));
+
     const opts: uPlot.Options = {
       width: w,
       height: h,
@@ -65,30 +78,30 @@ export function LineChart({ x, series, dateAxis, height, ci, fmtY = compact, xLa
       tzDate: (ts) => uPlot.tzDate(new Date(ts * 1e3), "Etc/UTC"),
       scales: { x: { time: !!dateAxis } },
       legend: { show: false },
-      cursor: {
-        drag: { x: true, y: false, setScale: true },
-        points: { size: 7, fill: (_u, i) => colors[i - 1] ?? text },
-      },
-      padding: [18, ci ? 70 : 14, 4, 4],
+      cursor: { drag: { x: true, y: false, setScale: true }, points: { size: 7, fill: (_u, i) => colors[i - 1] ?? text } },
+      padding: [26, 10, 2, 14],
       axes: [
         {
           stroke: muted,
-          grid: { stroke: grid, width: 1, dash: [2, 4] },
+          grid: { stroke: line, width: 1 },
           ticks: { show: false },
           font,
           label: xLabel,
-          labelFont: font,
-          labelSize: xLabel ? 22 : 0,
-          values: dateAxis ? undefined : (_u, vals) => vals.map((v) => compact(v)),
+          labelFont: `12px ${family}`,
+          labelSize: xLabel ? 24 : 0,
+          gap: 8,
+          values: dateAxis ? undefined : (_u, vals) => vals.map((v) => num(v)),
         },
         {
+          side: 1, // axe des valeurs à droite, comme sur les trackers de référence
           stroke: muted,
-          grid: { stroke: grid, width: 1, dash: [2, 4] },
+          grid: { stroke: line, width: 1 },
           ticks: { show: false },
           font,
-          size: 62,
+          size: 74,
+          gap: 8,
           label: yLabel,
-          labelFont: font,
+          labelFont: `12px ${family}`,
           labelSize: yLabel ? 20 : 0,
           values: (_u, vals) => vals.map((v) => fmtY(v)),
         },
@@ -98,9 +111,8 @@ export function LineChart({ x, series, dateAxis, height, ci, fmtY = compact, xLa
         ...series.map((s, i) => ({
           label: s.label,
           stroke: colors[i],
-          width: s.width ?? 1.6,
+          width: s.width ?? 1.5,
           dash: s.dash,
-          fill: s.fill ? colors[i] + "22" : undefined,
           points: { show: false },
         })),
       ],
@@ -108,64 +120,107 @@ export function LineChart({ x, series, dateAxis, height, ci, fmtY = compact, xLa
         draw: [
           (u) => {
             const ctx = u.ctx;
+            const L = u.bbox.left;
+            const R = u.bbox.left + u.bbox.width;
+            const T = u.bbox.top;
+            const B = u.bbox.top + u.bbox.height;
+            ctx.save();
+            ctx.setLineDash([]);
             // ligne zéro
             const y0 = u.valToPos(0, "y", true);
-            if (y0 > u.bbox.top && y0 < u.bbox.top + u.bbox.height) {
-              ctx.save();
+            if (y0 > T && y0 < B) {
               ctx.strokeStyle = muted;
-              ctx.globalAlpha = 0.55;
+              ctx.globalAlpha = 0.4;
               ctx.lineWidth = 1;
               ctx.beginPath();
-              ctx.moveTo(u.bbox.left, y0);
-              ctx.lineTo(u.bbox.left + u.bbox.width, y0);
+              ctx.moveTo(L, y0);
+              ctx.lineTo(R, y0);
               ctx.stroke();
-              ctx.restore();
+              ctx.globalAlpha = 1;
             }
-            // repères (jackpots…)
-            if (marks) {
-              ctx.save();
-              for (const m of marks) {
-                const px = u.valToPos(m.x, "x", true);
-                if (px < u.bbox.left || px > u.bbox.left + u.bbox.width) continue;
-                ctx.strokeStyle = resolve(m.color);
-                ctx.globalAlpha = 0.6;
-                ctx.setLineDash([3, 3]);
+            // annotations
+            if (visibleNotes.length) {
+              const placed: [number, number, number, number][] = [];
+              const fits = (bx: number, by: number, bw: number) =>
+                !placed.some(([px, py, pw, ph]) => bx < px + pw + 6 && bx + bw + 6 > px && by < py + ph + 4 && by + 14 > py);
+              ctx.font = `600 ${11.5 * dpr}px ${family}`;
+              for (const n of visibleNotes) {
+                const px = u.valToPos(n.x, "x", true);
+                const py = u.valToPos(n.y, "y", true);
+                if (px < L - 2 || px > R + 2) continue;
+                const col = n.kind === "jackpot" ? resolve("--gold") : n.kind === "peak" ? resolve("--pos") : n.kind === "low" ? resolve("--neg") : text;
+                // segment de swing / de période
+                if (n.x2 != null && n.y2 != null) {
+                  const px2 = u.valToPos(n.x2, "x", true);
+                  const py2 = u.valToPos(n.y2, "y", true);
+                  ctx.strokeStyle = muted;
+                  ctx.globalAlpha = 0.65;
+                  ctx.setLineDash([4 * dpr, 4 * dpr]);
+                  ctx.lineWidth = 1 * dpr;
+                  ctx.beginPath();
+                  if (n.kind === "breakeven") {
+                    ctx.moveTo(px2, py2);
+                    ctx.lineTo(px, py2);
+                    ctx.lineTo(px, py);
+                  } else {
+                    ctx.moveTo(px2, py2);
+                    ctx.lineTo(px, py);
+                  }
+                  ctx.stroke();
+                  ctx.setLineDash([]);
+                  ctx.globalAlpha = 1;
+                  ctx.fillStyle = text;
+                  ctx.beginPath();
+                  ctx.arc(px2, py2, 2.6 * dpr, 0, 7);
+                  ctx.fill();
+                }
+                // point
+                ctx.fillStyle = col;
                 ctx.beginPath();
-                ctx.moveTo(px, u.bbox.top);
-                ctx.lineTo(px, u.bbox.top + u.bbox.height);
-                ctx.stroke();
+                ctx.arc(px, py, 3.2 * dpr, 0, 7);
+                ctx.fill();
+                // libellé
+                const tw = ctx.measureText(n.label).width;
+                let lx = px - tw / 2;
+                const above = n.kind !== "low" && n.kind !== "downswing";
+                let ly = above ? py - 11 * dpr : py + 19 * dpr;
+                lx = Math.min(Math.max(L + 2, lx), R - tw - 2);
+                let tries = 0;
+                while (!fits(lx, ly, tw) && tries < 6) {
+                  ly += (above ? -1 : 1) * 15 * dpr;
+                  tries++;
+                }
+                placed.push([lx, ly - 11 * dpr, tw, 13 * dpr]);
+                ctx.fillStyle = col;
+                ctx.globalAlpha = 0.95;
+                ctx.fillText(n.label, lx, ly);
                 ctx.globalAlpha = 1;
-                ctx.setLineDash([]);
-                ctx.fillStyle = resolve(m.color);
-                ctx.font = `bold ${11 * devicePixelRatio}px sans-serif`;
-                ctx.fillText(m.label, px + 4, u.bbox.top + 12 * devicePixelRatio);
               }
-              ctx.restore();
             }
             // intervalle de confiance en bout de courbe
             if (ci) {
-              const xr = u.bbox.left + u.bbox.width + 18 * devicePixelRatio;
+              const xr = R - 12 * dpr; // juste à l'intérieur du cadre : l'axe est à droite
               const yl = u.valToPos(ci.lo, "y", true);
               const yh = u.valToPos(ci.hi, "y", true);
-              ctx.save();
-              ctx.setLineDash([]);
-              ctx.globalAlpha = 1;
               ctx.strokeStyle = resolve(ci.color);
               ctx.fillStyle = resolve(ci.color);
-              ctx.lineWidth = 2 * devicePixelRatio;
+              ctx.lineWidth = 1.6 * dpr;
               ctx.beginPath();
               ctx.moveTo(xr, yl);
               ctx.lineTo(xr, yh);
-              ctx.moveTo(xr - 6 * devicePixelRatio, yl);
-              ctx.lineTo(xr + 6 * devicePixelRatio, yl);
-              ctx.moveTo(xr - 6 * devicePixelRatio, yh);
-              ctx.lineTo(xr + 6 * devicePixelRatio, yh);
+              ctx.moveTo(xr - 5 * dpr, yl);
+              ctx.lineTo(xr + 5 * dpr, yl);
+              ctx.moveTo(xr - 5 * dpr, yh);
+              ctx.lineTo(xr + 5 * dpr, yh);
               ctx.stroke();
-              ctx.font = `bold ${10.5 * devicePixelRatio}px sans-serif`;
-              ctx.fillText(ci.hiLabel, xr + 9 * devicePixelRatio, yh + 4 * devicePixelRatio);
-              ctx.fillText(ci.loLabel, xr + 9 * devicePixelRatio, yl + 4 * devicePixelRatio);
-              ctx.restore();
+              ctx.font = `600 ${10.5 * dpr}px ${family}`;
+              ctx.textAlign = "right";
+              ctx.fillText(ci.hiLabel, xr - 8 * dpr, yh + 4 * dpr);
+              ctx.fillText(ci.loLabel, xr - 8 * dpr, yl + 4 * dpr);
+              ctx.textAlign = "left";
             }
+            ctx.restore();
+            void faint;
           },
         ],
         setCursor: [
@@ -187,16 +242,14 @@ export function LineChart({ x, series, dateAxis, height, ci, fmtY = compact, xLa
             t.innerHTML = html;
             t.style.display = "block";
             const left = u.cursor.left + u.over.offsetLeft;
-            const bw = el.clientWidth;
-            t.style.left = `${Math.min(left + 14, bw - t.offsetWidth - 6)}px`;
-            t.style.top = `${(u.cursor.top ?? 0) + u.over.offsetTop + 12}px`;
+            t.style.left = `${Math.min(left + 16, el.clientWidth - t.offsetWidth - 6)}px`;
+            t.style.top = `${(u.cursor.top ?? 0) + u.over.offsetTop + 14}px`;
           },
         ],
       },
     };
     const data: uPlot.AlignedData = [x, ...series.map((s) => s.values)];
     const u = new uPlot(opts, data, el);
-    plot.current = u;
     u.over.addEventListener("click", () => {
       const idx = u.cursor.idx;
       if (idx != null && pickRef.current) pickRef.current(u.data[0][idx]);
@@ -210,9 +263,8 @@ export function LineChart({ x, series, dateAxis, height, ci, fmtY = compact, xLa
     return () => {
       ro.disconnect();
       u.destroy();
-      plot.current = null;
     };
-  }, [x, series, dateAxis, height, ci, fmtY, xLabel, yLabel, marks, prefs.theme, prefs.accent, prefs.chartColors]);
+  }, [x, series, dateAxis, height, ci, fmtY, xLabel, yLabel, notes, prefs.theme, prefs.accent, prefs.chartColors]);
 
   return (
     <div className="lc" style={height ? { height } : undefined}>
