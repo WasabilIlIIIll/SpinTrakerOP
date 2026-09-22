@@ -29,14 +29,18 @@ Application de bureau, 100 % hors ligne, vos données restent chez vous.
 | **Leak finder** | Arbre complet de vos décisions préflop par position, situation et tranche de tapis, avec grille 13×13 des mains jouées, et comparaison à la population, aux regs ou à vos propres cibles. Stats postflop (c-bet, fold vs c-bet, check-raise, barrel, WTSD…). |
 | **Replayer & Review** | Rejouez chaque main sur une table animée : cartes, tapis, mises, équité au tapis, CEV vs résultat réel. Marquez une main d'une étoile pour la retrouver dans l'onglet Review. |
 | **Challenges** | Objectifs de volume, d'heures, de profit, de rakeback, de CEV ou de bankroll sur une période, avec rythme requis et suivi quotidien. |
-| **Personnalisation** | 5 thèmes poker, couleur d'accent libre, couleurs de courbes, densité, taille du texte, indicateurs du tableau de bord réordonnables, mode discret (floutage), français / anglais. |
+| **Personnalisation** | 6 thèmes, couleur d'accent libre, couleurs de courbes, densité, taille du texte, indicateurs du tableau de bord réordonnables, mode discret (floutage), français / anglais. |
 
 ## Installation
 
 ### Depuis les releases (recommandé)
 
 Téléchargez la dernière version pour votre système sur la page
-[Releases](../../releases/latest) : `.msi` ou `.exe` (Windows), `.dmg` (macOS), `.AppImage` / `.deb` (Linux).
+[Releases](https://github.com/WasabilIlIIIll/SpinTrakerOP/releases/latest) :
+`.exe` ou `.msi` (Windows), `.dmg` (macOS), `.AppImage` / `.deb` (Linux).
+
+Sous Windows, lancez le `.exe` : l'installation se fait pour l'utilisateur courant, sans
+droits administrateur, et l'application démarre automatiquement.
 
 ### Depuis les sources
 
@@ -44,8 +48,8 @@ Prérequis : [Node.js 20+](https://nodejs.org), [Rust](https://rustup.rs) et, so
 les *Build Tools* de Visual Studio (composant « Développement Desktop en C++ »).
 
 ```bash
-git clone https://github.com/<votre-compte>/spin-tracker-op.git
-cd spin-tracker-op
+git clone https://github.com/WasabilIlIIIll/SpinTrakerOP.git
+cd SpinTrakerOP
 npm install
 npm run app        # lance l'application en mode développement
 npm run bundle     # génère l'installeur dans src-tauri/target/release/bundle
@@ -59,6 +63,11 @@ le même dossier tous les jours ne crée **aucun doublon**, les mains déjà con
 
 Chaque import forme un lot listé dans l'historique, avec une **corbeille** : supprimer un import
 retire uniquement les mains qu'il avait apportées (et les tournois devenus vides).
+
+Seuls les **formats Spin** sont conservés (2 ou 3 joueurs, tapis de départ court). Si votre
+dossier contient des MTT, des freerolls ou des Sit & Go classiques, ils sont comptés et listés
+dans le rapport d'import puis ignorés : mélangés aux Spins, ils rendraient le CEV et les chips
+totalement faux.
 
 | Room | Format | Statut |
 |---|---|---|
