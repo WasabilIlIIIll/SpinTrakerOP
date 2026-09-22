@@ -3,7 +3,6 @@ import { api } from "../lib/api";
 import { useApp, useQuery } from "../lib/state";
 import { LineChart, type LineSeries } from "../components/LineChart";
 import { Icon } from "../components/Icon";
-import { ChartFilters } from "../components/ChartFilters";
 import { Dropdown, Empty, Loading, NumInput, Seg, Help } from "../components/ui";
 import { luckLabel } from "../components/KpiRow";
 import { cls, num } from "../lib/format";
@@ -58,10 +57,9 @@ export function ChipsTab({ full, onFull }: { full?: boolean; onFull?: () => void
   }
   return (
     <div className={cls("chart-card", full && "full")}>
-      <ChartFilters scenarios full={full} onFull={onFull} />
-      <div className="chart-top">
+      <div className="chart-stage">
         {luck && (
-          <div className={cls("luck", luck.tone)} title="Chance calculée sur l'écart entre jetons réels et EV des all-in">
+          <div className={cls("ov ov-tl luck", luck.tone)} title="Chance calculée sur l'écart entre jetons réels et EV des all-in">
             <Icon name={luck.icon} size={17} />
             <div>
               <b>{luck.label}</b>
@@ -69,53 +67,59 @@ export function ChipsTab({ full, onFull }: { full?: boolean; onFull?: () => void
             </div>
           </div>
         )}
-        <div className="grow" />
-        {data && (
-          <div className="chart-meta">
-            <span>
-              CEV <b>{num(data.cev, 1)}</b> ± {num(data.cev_ci, 0)}
-            </span>
-            <span>
-              min <b style={{ color: "var(--s-min)" }}>{num(data.min_cev, 1)}</b>
-            </span>
-            <span>
-              {num(data.hands)} mains · {num(data.tournaments)} spins
-            </span>
-          </div>
-        )}
-        <button className={cls("pill", prefs.showNotes && "on")} onClick={() => setPrefs({ showNotes: !prefs.showNotes })} title="Afficher les événements marquants sur la courbe">
-          <Icon name="sparkle" size={13} /> Événements
-        </button>
-        <button className={cls("pill", prefs.showCi && "on")} onClick={() => setPrefs({ showCi: !prefs.showCi })} title="Intervalle de confiance à 95 % du CEV">
-          <Icon name="target" size={13} /> IC 95 %
-        </button>
-        <Seg
-          small
-          value={axis}
-          onChange={(v) => setPrefs({ chipsAxis: v })}
-          options={[
-            { v: "hands", l: t("Mains") },
-            { v: "tournaments", l: t("Tournois") },
-            { v: "date", l: t("Date") },
-          ]}
-        />
-      </div>
-      <div className="chart-area">
-        {loading && !data ? (
-          <Loading h={380} />
-        ) : (
-          data && (
-            <LineChart
-              x={data.x}
-              series={series}
-              ci={ci}
-              notes={notes}
-              xLabel={axis === "hands" ? t("Mains jouées") : axis === "tournaments" ? t("Tournois joués") : undefined}
-              dateAxis={axis === "date"}
-              yLabel="Chips"
-            />
-          )
-        )}
+        <div className="ov ov-tr">
+          {data && (
+            <div className="chart-meta">
+              <span>
+                CEV <b>{num(data.cev, 1)}</b> ± {num(data.cev_ci, 0)}
+              </span>
+              <span>
+                min <b style={{ color: "var(--s-min)" }}>{num(data.min_cev, 1)}</b>
+              </span>
+              <span>
+                {num(data.hands)} mains · {num(data.tournaments)} spins
+              </span>
+            </div>
+          )}
+          <button className={cls("pill", prefs.showNotes && "on")} onClick={() => setPrefs({ showNotes: !prefs.showNotes })} title="Afficher les événements marquants sur la courbe">
+            <Icon name="sparkle" size={13} /> Événements
+          </button>
+          <button className={cls("pill", prefs.showCi && "on")} onClick={() => setPrefs({ showCi: !prefs.showCi })} title="Intervalle de confiance à 95 % du CEV">
+            <Icon name="target" size={13} /> IC 95 %
+          </button>
+          <Seg
+            small
+            value={axis}
+            onChange={(v) => setPrefs({ chipsAxis: v })}
+            options={[
+              { v: "hands", l: t("Mains") },
+              { v: "tournaments", l: t("Tournois") },
+              { v: "date", l: t("Date") },
+            ]}
+          />
+          {onFull && (
+            <button className="pill" onClick={onFull} title={full ? "Réduire" : "Agrandir le graphique"}>
+              <Icon name={full ? "x" : "layers"} size={13} /> {full ? "Réduire" : "Plein écran"}
+            </button>
+          )}
+        </div>
+        <div className="chart-area">
+          {loading && !data ? (
+            <Loading h={380} />
+          ) : (
+            data && (
+              <LineChart
+                x={data.x}
+                series={series}
+                ci={ci}
+                notes={notes}
+                xLabel={axis === "hands" ? t("Mains jouées") : axis === "tournaments" ? t("Tournois joués") : undefined}
+                dateAxis={axis === "date"}
+                yLabel="Chips"
+              />
+            )
+          )}
+        </div>
       </div>
       <div className="chart-foot">
         <div className="rb-quick">

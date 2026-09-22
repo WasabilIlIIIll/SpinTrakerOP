@@ -19,6 +19,8 @@ pub struct ImportResult {
     pub duplicates: usize,
     pub invalid: usize,
     pub tournaments: usize,
+    /// tournois écartés car hors format Spin (MTT, freeroll, SNG…)
+    pub skipped: usize,
     pub errors: Vec<String>,
     pub millis: u128,
     /// numéro de lot : permet de supprimer cet import depuis l'historique
@@ -68,6 +70,20 @@ pub fn run(paths: Vec<PathBuf>, store: &parking_lot::RwLock<Store>, db: &parking
         match r {
             Ok(files) => {
                 for pf in files {
+                    // les tapis de départ ne sont connus qu'après lecture des mains
+                    let mut t0 = pf.tournament.clone();
+                    if t0.starting_stack <= 0.0 {
+                        if let Some(h) = pf.hands.first() {
+                            t0.starting_stack = h.seats[h.hero as usize].stack;
+                        }
+                    }
+                    if !t0.is_spin() {
+                        res.skipped += 1;
+                        if res.errors.len() < 50 {
+                            res.errors.push(format!("{} : hors format Spin ({} joueurs, tapis {:.0}) — ignoré", t0.name, t0.table_size, t0.starting_stack));
+                        }
+                        continue;
+                    }
                     for h in pf.hands {
                         res.hands += 1;
                         if existing.contains(&h.id) || !seen.insert(h.id.clone()) {
@@ -148,10 +164,33 @@ pub fn run(paths: Vec<PathBuf>, store: &parking_lot::RwLock<Store>, db: &parking
     res
 }
 
-/// Chargement initial : recalcule les faits manquants ou obsolètes.
+/// Chargement initial : recalcule les faits manquants ou obsolètes, et purge les
+/// tournois hors format Spin importés par une version antérieure.
 pub fn load(db: &mut Db, store: &mut Store) -> Result<(), String> {
-    let tours = db.load_tournaments()?;
-    let raw = db.load_hands()?;
+    let mut tours = db.load_tournaments()?;
+    let mut raw = db.load_hands()?;
+    // tapis de départ éventuellement absent : on le complète depuis la première main
+    let mut first_stack: HashMap<String, f64> = HashMap::new();
+    for (h, _) in &raw {
+        first_stack.entry(h.tid.clone()).or_insert_with(|| h.seats[h.hero as usize].stack);
+    }
+    let bad: HashSet<String> = tours
+        .iter()
+        .filter(|t| {
+            let mut t2 = (*t).clone();
+            if t2.starting_stack <= 0.0 {
+                t2.starting_stack = first_stack.get(&t2.id).copied().unwrap_or(0.0);
+            }
+            !t2.is_spin()
+        })
+        .map(|t| t.id.clone())
+        .collect();
+    if !bad.is_empty() {
+        let ids: Vec<String> = bad.iter().cloned().collect();
+        let _ = db.delete_tournaments(&ids);
+        tours.retain(|t| !bad.contains(&t.id));
+        raw.retain(|(h, _)| !bad.contains(&h.tid));
+    }
     let mut stale = Vec::new();
     let hands: Vec<(Hand, HandFacts)> = raw
         .into_par_iter()

@@ -75,6 +75,95 @@ fn main() {
             println!("ROI EV          {:.2} %", sum.roi.ev);
             println!("Temps joué      {} s ({:.1} spins/h)", sum.seconds, sum.spins_per_hour);
         }
+        Some("diag") => {
+            {
+                let mut db = state.db.lock();
+                let mut st = state.store.write();
+                import::load(&mut db, &mut st).ok();
+            }
+            let s = state.store.read();
+            use std::collections::BTreeMap;
+            let mut by_size: BTreeMap<u8, usize> = BTreeMap::new();
+            let mut by_buyin: BTreeMap<i64, (usize, f64, f64)> = BTreeMap::new();
+            let mut by_stack: BTreeMap<i64, usize> = BTreeMap::new();
+            let mut by_name: BTreeMap<String, usize> = BTreeMap::new();
+            let mut total_chips = 0.0;
+            for t in &s.tours {
+                *by_size.entry(t.t.table_size).or_default() += 1;
+                let e = by_buyin.entry((t.t.buyin * 100.0).round() as i64).or_insert((0, 0.0, 0.0));
+                e.0 += 1;
+                e.1 += t.chips;
+                e.2 += t.ev;
+                *by_stack.entry(t.t.starting_stack.round() as i64).or_default() += 1;
+                *by_name.entry(t.t.name.clone()).or_default() += 1;
+                total_chips += t.chips;
+            }
+            println!("tournois {} | mains {} | chips totaux {:.0}", s.tours.len(), s.hands.len(), total_chips);
+            println!("
+-- joueurs par table --");
+            for (k, v) in &by_size {
+                println!("  {k} joueurs : {v} tournois");
+            }
+            println!("
+-- tapis de départ --");
+            for (k, v) in by_stack.iter().rev().take(12) {
+                println!("  {k} jetons : {v} tournois");
+            }
+            println!("
+-- buy-ins --");
+            for (k, (n, c, e)) in &by_buyin {
+                println!("  {:.2} : {} tournois, chips {:.0}, CEV {:.1}", *k as f64 / 100.0, n, c, e / *n as f64);
+            }
+            println!("
+-- noms de tournoi --");
+            let mut names: Vec<_> = by_name.into_iter().collect();
+            names.sort_by_key(|(_, n)| std::cmp::Reverse(*n));
+            for (k, v) in names.iter().take(15) {
+                println!("  {v:5} × {k}");
+            }
+            println!("
+-- 10 tournois aux chips les plus extremes --");
+            let mut tt: Vec<_> = s.tours.iter().collect();
+            tt.sort_by(|a, b| b.chips.abs().partial_cmp(&a.chips.abs()).unwrap());
+            for t in tt.iter().take(10) {
+                println!(
+                    "  {} | {} | {} joueurs | tapis {:.0} | buy-in {:.2} | chips {:.0} | ev {:.0} | mains {}",
+                    t.t.code, t.t.name, t.t.table_size, t.t.starting_stack, t.t.buyin, t.chips, t.ev, t.hands.len()
+                );
+            }
+        }
+        Some("check") => {
+            {
+                let mut db = state.db.lock();
+                let mut st = state.store.write();
+                import::load(&mut db, &mut st).ok();
+            }
+            let s = state.store.read();
+            let mut bad = 0;
+            for r in &s.hands {
+                let pot = r.f.pot;
+                let sum_ev: f64 = r.f.players.iter().map(|p| p.ev).sum();
+                let worst = r.f.players.iter().map(|p| p.ev.abs()).fold(0.0, f64::max);
+                if sum_ev.abs() > 0.5 || worst > pot + 1.0 {
+                    bad += 1;
+                    if bad <= 6 {
+                        println!(
+                            "main {} | {} joueurs | pot {:.0} | Σev {:.1} | ev {:?} | net {:?} | allin_street {:?} | board {}",
+                            r.h.id,
+                            r.h.seats.len(),
+                            pot,
+                            sum_ev,
+                            r.f.players.iter().map(|p| p.ev.round()).collect::<Vec<_>>(),
+                            r.f.players.iter().map(|p| p.net.round()).collect::<Vec<_>>(),
+                            r.f.allin_street,
+                            r.h.board.len()
+                        );
+                        println!("   mises {:?} gains {:?}", r.h.seats.iter().map(|x| x.bet).collect::<Vec<_>>(), r.h.seats.iter().map(|x| x.win).collect::<Vec<_>>());
+                    }
+                }
+            }
+            println!("mains incohérentes : {bad} / {}", s.hands.len());
+        }
         Some("kv") if args.len() > 2 => {
             state.db.lock().kv_set(&args[1], &args[2]).expect("écriture impossible");
             println!("ok");

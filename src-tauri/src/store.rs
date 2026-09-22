@@ -136,6 +136,8 @@ impl Store {
             }
         }
         let mut tours: Vec<TInfo> = tmap.into_values().map(|t| TInfo { t, ..Default::default() }).collect();
+        // filet de sécurité : jamais de MTT/freeroll dans les agrégats d'un tracker de Spins
+        tours.retain(|t| t.t.starting_stack <= 0.0 || t.t.is_spin());
         tours.sort_by(|a, b| a.t.start.cmp(&b.t.start).then(a.t.id.cmp(&b.t.id)));
         let tindex: HashMap<String, usize> = tours.iter().enumerate().map(|(i, t)| (t.t.id.clone(), i)).collect();
 

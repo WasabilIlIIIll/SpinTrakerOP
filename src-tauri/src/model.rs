@@ -98,6 +98,15 @@ pub struct Tournament {
     pub source: String,
 }
 
+impl Tournament {
+    /// Spin & Go / Twister / Expresso : 3 joueurs maximum et tapis de départ court.
+    /// Les MTT, freerolls et SNG classiques importés par erreur fausseraient tous les
+    /// agrégats (CEV, chips, EV profit) : ils sont écartés.
+    pub fn is_spin(&self) -> bool {
+        self.table_size >= 2 && self.table_size <= 3 && self.starting_stack > 0.0 && self.starting_stack <= 2000.0
+    }
+}
+
 pub fn card_str(c: Card) -> String {
     const R: &[u8] = b"23456789TJQKA";
     const S: &[u8] = b"cdhs";

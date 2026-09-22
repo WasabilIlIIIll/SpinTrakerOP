@@ -225,8 +225,8 @@ textarea.notes { width: 100%; resize: vertical; font-family: inherit; }
 /* ---------- graphiques ---------- */
 .chart-card { display: flex; flex-direction: column; gap: 10px; }
 .chart-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.chart-area { height: var(--chart-h, clamp(320px, calc(100vh - 430px), 860px)); position: relative; }
-.chart-card.full .chart-area { height: calc(100vh - 215px); }
+.chart-area { height: var(--chart-h, clamp(340px, calc(100vh - 232px), 1600px)); position: relative; }
+.chart-card.full .chart-area { height: calc(100vh - 130px); }
 .lc { position: relative; height: 100%; }
 .lc-in { height: 100%; }
 .lc .u-select { background: var(--accent-soft); }
@@ -576,4 +576,21 @@ html[data-anim="off"] .rp-bc { transition: none; }
 .pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface2); color: var(--muted); font-size: .79rem; transition: .12s; }
 .pill:hover { color: var(--text); border-color: var(--border); }
 .pill.on { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--text); }
-.chart-card.with-events .chart-area { height: clamp(300px, calc(100vh - 560px), 720px); }
+.chart-card.with-events .chart-area { height: clamp(320px, calc(100vh - 430px), 1100px); }
+
+/* ---------- graphique plein cadre ---------- */
+.chart-stage { position: relative; }
+.ov { position: absolute; z-index: 5; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ov-tl { top: 4px; left: 6px; }
+.ov-tr { top: 2px; right: 6px; justify-content: flex-end; max-width: 78%; }
+.ov-tr .chart-meta { margin-left: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 5px 13px; backdrop-filter: blur(var(--blur)); }
+.chart-card { gap: 6px; }
+.chart-top { min-height: 0; }
+
+/* ---------- pop-up de filtres ---------- */
+.fmodal { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px 26px; }
+.fmodal .fsec { min-width: 0; }
+.fmodal .fsec-t { font-size: .73rem; }
+.fchips.hours { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
+.fchips.hours .fchip { justify-content: center; padding: 4px 0; font-size: .74rem; }
+.fmodal-foot { display: flex; align-items: center; gap: 10px; margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--line); }

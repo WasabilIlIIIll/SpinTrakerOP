@@ -185,6 +185,18 @@ impl Db {
         Ok((hands, tours))
     }
 
+    /// Supprime des tournois et toutes leurs mains (utilisé pour purger les formats hors Spin).
+    pub fn delete_tournaments(&mut self, ids: &[String]) -> Result<usize, String> {
+        let tx = self.conn.transaction().map_err(|e| e.to_string())?;
+        let mut n = 0;
+        for id in ids {
+            tx.execute("DELETE FROM hands WHERE tid = ?1", params![id]).map_err(|e| e.to_string())?;
+            n += tx.execute("DELETE FROM tournaments WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        Ok(n)
+    }
+
     pub fn load_favorites(&self) -> Result<std::collections::HashMap<String, String>, String> {
         let mut st = self.conn.prepare("SELECT hand_id, note FROM favorites").map_err(|e| e.to_string())?;
         let rows = st

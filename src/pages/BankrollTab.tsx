@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { api } from "../lib/api";
 import { useApp, useQuery } from "../lib/state";
 import { LineChart, type LineSeries } from "../components/LineChart";
-import { ChartFilters } from "../components/ChartFilters";
 import { Empty, Help, Loading, Priv, Seg, Toggle } from "../components/ui";
 import type { BankrollChart as BankrollChartData } from "../lib/api";
 import { Icon } from "../components/Icon";
@@ -46,7 +45,6 @@ export function BankrollTab({ full, onFull }: { full?: boolean; onFull?: () => v
   return (
     <div className="br-grid">
       <div className={cls("chart-card", full ? "full" : "with-events")}>
-        <ChartFilters full={full} onFull={onFull} />
         <div className="chart-top">
           {sum && (
             <div className="br-sum">
@@ -74,6 +72,11 @@ export function BankrollTab({ full, onFull }: { full?: boolean; onFull?: () => v
           </button>
           <Toggle on={prefs.includeBankrollStart} onChange={(v) => setPrefs({ includeBankrollStart: v })} label="Bankroll de départ" />
           <Seg small value={axis} onChange={(v) => setPrefs({ bankrollAxis: v })} options={[{ v: "tournaments", l: t("Tournois") }, { v: "date", l: t("Date") }]} />
+          {onFull && (
+            <button className="pill" onClick={onFull} title={full ? "Réduire" : "Agrandir le graphique"}>
+              <Icon name={full ? "x" : "layers"} size={13} /> {full ? "Réduire" : "Plein écran"}
+            </button>
+          )}
         </div>
         <div className="chart-area">
           {loading && !data ? (
