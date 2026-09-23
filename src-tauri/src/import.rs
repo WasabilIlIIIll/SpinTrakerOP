@@ -80,6 +80,20 @@ pub fn run_with(
         }
         seen.into_iter().filter(|(_, r)| r.len() == 1).map(|(h, r)| (h, r.into_iter().next().unwrap())).collect()
     };
+    // tournois déjà en base mais lus par une version antérieure du parser, incomplète
+    // (Betclic sans prize pool ni place) : un réimport les remplace au lieu de les ignorer
+    let refresh: HashSet<String> = {
+        let st = store.read();
+        parsed
+            .iter()
+            .filter_map(|(_, r, _)| r.as_ref().ok())
+            .flatten()
+            .map(|pf| &pf.tournament)
+            .filter(|t| t.id.starts_with("bcl:") && t.prize_pool > 0.0)
+            .filter(|t| st.tindex.get(&t.id).map(|&i| st.tours[i].t.prize_pool <= 0.0).unwrap_or(false))
+            .map(|t| t.id.clone())
+            .collect()
+    };
     let mut res = ImportResult { sources: parsed.len(), ..Default::default() };
     let existing: HashSet<String> = {
         let st = store.read();
@@ -108,7 +122,7 @@ pub fn run_with(
                     }
                     for h in pf.hands {
                         res.hands += 1;
-                        if existing.contains(&h.id) || !seen.insert(h.id.clone()) {
+                        if (existing.contains(&h.id) && !refresh.contains(&h.tid)) || !seen.insert(h.id.clone()) {
                             res.duplicates += 1;
                         } else {
                             new_hands.push(h);
@@ -163,6 +177,10 @@ pub fn run_with(
     let mut changed: Vec<Tournament> = Vec::new();
     for (id, t) in new_tours {
         match idx.get(&id) {
+            Some(&i) if refresh.contains(&id) => {
+                tours[i] = t;
+                changed.push(tours[i].clone());
+            }
             Some(&i) => {
                 crate::store::merge_tournament(&mut tours[i], t);
                 changed.push(tours[i].clone());
@@ -181,14 +199,16 @@ pub fn run_with(
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
         let batch = dbg.start_import(now, &label).unwrap_or(0);
         res.batch = batch;
-        if let Err(e) = dbg.save_batch(&changed, &analyzed, batch) {
+        let replace: Vec<String> = refresh.iter().cloned().collect();
+        if let Err(e) = dbg.save_batch(&changed, &analyzed, batch, &replace) {
             res.errors.push(format!("base de données : {e}"));
         }
         let _ = dbg.finish_import(batch, res.sources as i64, res.hands as i64, res.imported as i64, res.duplicates as i64, res.invalid as i64, "ok");
         // l'import est écrit dans le fichier principal : rien ne dépend plus du journal WAL
         dbg.checkpoint();
     }
-    let mut hands: Vec<(Hand, HandFacts)> = std::mem::take(&mut st.hands).into_iter().map(|r| (r.h, r.f)).collect();
+    let mut hands: Vec<(Hand, HandFacts)> =
+        std::mem::take(&mut st.hands).into_iter().filter(|r| !refresh.contains(&r.h.tid)).map(|r| (r.h, r.f)).collect();
     hands.extend(analyzed);
     st.rebuild(tours, hands);
     progress(Progress { phase: "termine".into(), done: 1, total: 1 });

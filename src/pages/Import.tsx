@@ -5,7 +5,7 @@ import { useApp, useQuery, clearCache } from "../lib/state";
 import { Btn, Loading, Modal, Panel, Seg } from "../components/ui";
 import { Icon } from "../components/Icon";
 import { Heatmap } from "../components/Heatmap";
-import { cls, date, num } from "../lib/format";
+import { cls, num, realDate } from "../lib/format";
 
 export function ImportPage() {
   const { bump, toast, overview, filter } = useApp();
@@ -164,7 +164,7 @@ export function ImportPage() {
             <tbody>
               {(hist ?? []).map((h) => (
                 <tr key={h.id}>
-                  <td>{date(h.ts, true)}</td>
+                  <td>{realDate(h.ts)}</td>
                   <td className="muted">{h.label || "–"}</td>
                   <td className="r">{num(h.sources)}</td>
                   <td className="r">{num(h.hands)}</td>
@@ -181,7 +181,7 @@ export function ImportPage() {
                           ? "Import antérieur au suivi par lots : ses mains ne peuvent plus être isolées (Paramètres → Données pour tout effacer)"
                           : "Supprimer cet import et les mains qu'il a apportées"
                       }
-                      onClick={() => setDel({ id: h.id, label: h.label || date(h.ts, true), remaining: h.remaining })}
+                      onClick={() => setDel({ id: h.id, label: h.label || realDate(h.ts), remaining: h.remaining })}
                     >
                       <Icon name="trash" size={14} />
                     </button>

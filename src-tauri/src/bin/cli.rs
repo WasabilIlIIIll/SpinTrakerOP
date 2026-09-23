@@ -192,6 +192,10 @@ fn main() {
             }
             println!("ruptures de tapis : {breaks} · places incohérentes : {wrong_place}");
         }
+        Some("imports") => match state.db.lock().imports() {
+            Ok(rows) => rows.iter().for_each(|r| println!("{r}")),
+            Err(e) => println!("erreur : {e}"),
+        },
         Some("kv") if args.len() > 2 => {
             state.db.lock().kv_set(&args[1], &args[2]).expect("écriture impossible");
             println!("ok");

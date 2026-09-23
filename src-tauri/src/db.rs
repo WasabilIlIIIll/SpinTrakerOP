@@ -33,7 +33,27 @@ impl Db {
         let _ = conn.execute("ALTER TABLE hands ADD COLUMN batch INTEGER DEFAULT 0", []);
         let _ = conn.execute("ALTER TABLE imports ADD COLUMN label TEXT DEFAULT ''", []);
         let _ = conn.execute("CREATE INDEX IF NOT EXISTS hands_batch ON hands(batch)", []);
-        Ok(Db { conn })
+        let db = Db { conn };
+        db.repair_batches();
+        Ok(db)
+    }
+
+    /// Un lot qui compte plus de mains que son import n'en a apporté a hérité d'anciennes mains
+    /// (numéro d'import réutilisé après une reconstruction de la base). Les mains d'un import
+    /// sont insérées d'un bloc à la fin de la table : on garde dans le lot les plus récentes et
+    /// on rend les autres anonymes (lot 0), pour que la corbeille ne supprime que le bon import.
+    fn repair_batches(&self) {
+        let bad: Vec<(i64, i64)> = self
+            .conn
+            .prepare("SELECT id, imported FROM imports WHERE imported > 0 AND (SELECT COUNT(*) FROM hands WHERE batch = imports.id) > imported")
+            .and_then(|mut st| st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect())
+            .unwrap_or_default();
+        for (id, n) in bad {
+            let _ = self.conn.execute(
+                "UPDATE hands SET batch = 0 WHERE batch = ?1 AND rowid NOT IN (SELECT rowid FROM hands WHERE batch = ?1 ORDER BY rowid DESC LIMIT ?2)",
+                params![id, n],
+            );
+        }
     }
 
     /// Contrôle rapide d'intégrité (quelques ms) : faux si la base est endommagée.
@@ -87,9 +107,13 @@ impl Db {
         Ok(ids)
     }
 
-    pub fn save_batch(&mut self, ts: &[Tournament], hands: &[(Hand, HandFacts)], batch: i64) -> Result<(), String> {
+    /// `replace` : tournois dont les mains déjà en base sont remplacées par celles du lot.
+    pub fn save_batch(&mut self, ts: &[Tournament], hands: &[(Hand, HandFacts)], batch: i64, replace: &[String]) -> Result<(), String> {
         let tx = self.conn.transaction().map_err(|e| e.to_string())?;
         {
+            for tid in replace {
+                tx.execute("DELETE FROM hands WHERE tid = ?1", params![tid]).map_err(|e| e.to_string())?;
+            }
             let mut st = tx.prepare("INSERT OR REPLACE INTO tournaments (id, start, data) VALUES (?1, ?2, ?3)").map_err(|e| e.to_string())?;
             for t in ts {
                 let b = rmp_serde::to_vec(t).map_err(|e| e.to_string())?;
@@ -173,10 +197,15 @@ impl Db {
 
     /// Crée la ligne d'historique et renvoie son identifiant (= numéro de lot des mains).
     pub fn start_import(&self, ts: i64, label: &str) -> Result<i64, String> {
-        self.conn
-            .execute("INSERT INTO imports (ts, label, status) VALUES (?1, ?2, 'en cours')", params![ts, label])
+        // numéro jamais porté par une main existante, même si la table des imports a été perdue
+        let id: i64 = self
+            .conn
+            .query_row("SELECT MAX(COALESCE((SELECT MAX(id) FROM imports), 0), COALESCE((SELECT MAX(batch) FROM hands), 0)) + 1", [], |r| r.get(0))
             .map_err(|e| e.to_string())?;
-        Ok(self.conn.last_insert_rowid())
+        self.conn
+            .execute("INSERT INTO imports (id, ts, label, status) VALUES (?1, ?2, ?3, 'en cours')", params![id, ts, label])
+            .map_err(|e| e.to_string())?;
+        Ok(id)
     }
 
     pub fn finish_import(&self, id: i64, sources: i64, hands: i64, imported: i64, dup: i64, invalid: i64, status: &str) -> Result<(), String> {
@@ -191,6 +220,13 @@ impl Db {
 
     /// Supprime un import : ses mains, les tournois devenus vides, et la ligne d'historique.
     pub fn delete_import(&mut self, id: i64) -> Result<(usize, usize), String> {
+        let (imported, in_batch): (i64, i64) = self
+            .conn
+            .query_row("SELECT imported, (SELECT COUNT(*) FROM hands WHERE batch = ?1) FROM imports WHERE id = ?1", params![id], |r| Ok((r.get(0)?, r.get(1)?)))
+            .map_err(|e| e.to_string())?;
+        if in_batch > imported {
+            return Err(format!("suppression refusée : le lot contient {in_batch} mains pour {imported} importées"));
+        }
         let tx = self.conn.transaction().map_err(|e| e.to_string())?;
         let hands = tx.execute("DELETE FROM hands WHERE batch = ?1", params![id]).map_err(|e| e.to_string())?;
         let tours = tx

@@ -56,6 +56,13 @@ export function date(ts: number, withTime = false): string {
   return withTime ? `${s} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}` : s;
 }
 
+/** Date d'un vrai horodatage Unix (import, sauvegarde…), affichée à l'heure de l'ordinateur. */
+export function realDate(ts: number): string {
+  if (!ts) return "–";
+  const d = new Date(ts * 1000);
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function time(ts: number): string {
   const d = new Date(ts * 1000);
   return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
