@@ -22,6 +22,13 @@ pub struct AppState {
     pub db: Arc<Mutex<db::Db>>,
     pub db_path: PathBuf,
     pub ready: Arc<AtomicBool>,
+    /// message à afficher au démarrage (restauration de sauvegarde…)
+    pub notice: Arc<Mutex<Option<String>>>,
+}
+
+#[tauri::command]
+fn startup_notice(state: tauri::State<AppState>) -> Option<String> {
+    state.notice.lock().take()
 }
 
 #[tauri::command]
@@ -47,22 +54,78 @@ fn migrate_legacy_data(dir: &std::path::Path) {
     }
 }
 
+/// Sauvegardes automatiques : une par jour, les 7 plus récentes sont conservées.
+fn backup_dir(dir: &std::path::Path) -> PathBuf {
+    dir.join("sauvegardes")
+}
+
+fn latest_backup(dir: &std::path::Path) -> Option<PathBuf> {
+    let mut v: Vec<PathBuf> = std::fs::read_dir(backup_dir(dir)).ok()?.filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.extension().map(|x| x == "db").unwrap_or(false)).collect();
+    v.sort();
+    v.pop()
+}
+
+fn daily_backup(db: &db::Db, dir: &std::path::Path) {
+    let bdir = backup_dir(dir);
+    if std::fs::create_dir_all(&bdir).is_err() {
+        return;
+    }
+    let day = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() / 86400).unwrap_or(0);
+    let dest = bdir.join(format!("spintracker-{day}.db"));
+    if !dest.exists() {
+        let _ = db.snapshot(&dest);
+    }
+    let mut all: Vec<PathBuf> = std::fs::read_dir(&bdir).map(|r| r.filter_map(|e| e.ok().map(|e| e.path())).collect()).unwrap_or_default();
+    all.sort();
+    while all.len() > 7 {
+        let _ = std::fs::remove_file(all.remove(0));
+    }
+}
+
+/// Ouvre la base ; si elle est illisible, la met de côté et restaure la dernière sauvegarde.
+fn open_db_safely(dir: &std::path::Path, db_path: &std::path::Path) -> Result<(db::Db, Option<String>), String> {
+    match db::Db::open(db_path) {
+        Ok(db) if db.quick_ok() => return Ok((db, None)),
+        Ok(db) => drop(db),
+        Err(_) => {}
+    }
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let aside = dir.join(format!("spintracker-endommagee-{stamp}.db"));
+    let _ = std::fs::rename(db_path, &aside);
+    for ext in ["-wal", "-shm"] {
+        let _ = std::fs::remove_file(PathBuf::from(format!("{}{ext}", db_path.display())));
+    }
+    let note = match latest_backup(dir) {
+        Some(b) if std::fs::copy(&b, db_path).is_ok() => format!("Base endommagée : restauration de la sauvegarde {}. L'ancienne base est conservée dans {}.", b.display(), aside.display()),
+        _ => format!("Base endommagée et aucune sauvegarde disponible : nouvelle base créée. L'ancienne est conservée dans {}.", aside.display()),
+    };
+    Ok((db::Db::open(db_path)?, Some(note)))
+}
+
 pub fn open_state(dir: &std::path::Path) -> Result<AppState, String> {
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     migrate_legacy_data(dir);
     let db_path = dir.join("spintracker.db");
-    let db = db::Db::open(&db_path)?;
+    let (db, recovery_note) = open_db_safely(dir, &db_path)?;
+    daily_backup(&db, dir);
     let mut st = store::Store::default();
     if let Some(js) = db.kv_get("settings") {
         if let Ok(s) = serde_json::from_str::<settings::Settings>(&js) {
             st.settings = s;
         }
     }
+    st.settings.add_missing_tables();
     for (n, tags, notes) in db.load_players().unwrap_or_default() {
         st.meta.insert(n, (tags, notes));
     }
     st.favorites = db.load_favorites().unwrap_or_default();
-    Ok(AppState { store: Arc::new(RwLock::new(st)), db: Arc::new(Mutex::new(db)), db_path, ready: Arc::new(AtomicBool::new(false)) })
+    Ok(AppState {
+        store: Arc::new(RwLock::new(st)),
+        db: Arc::new(Mutex::new(db)),
+        db_path,
+        ready: Arc::new(AtomicBool::new(false)),
+        notice: Arc::new(Mutex::new(recovery_note)),
+    })
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -96,6 +159,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             is_ready,
+            startup_notice,
             commands::overview,
             commands::import_paths,
             commands::get_summary,
@@ -107,6 +171,7 @@ pub fn run() {
             commands::results_by,
             commands::multipliers,
             commands::calendar,
+            commands::sessions,
             commands::tournaments,
             commands::hands,
             commands::hand_detail,
@@ -132,6 +197,14 @@ pub fn run() {
             commands::export_csv,
             commands::scenarios,
         ])
-        .run(tauri::generate_context!())
-        .expect("erreur au lancement de Spin Tracker OP");
+        .build(tauri::generate_context!())
+        .expect("erreur au lancement de Spin Tracker OP")
+        .run(|handle, event| {
+            // à la fermeture, tout est reporté dans le fichier principal de la base
+            if let tauri::RunEvent::Exit = event {
+                if let Some(state) = handle.try_state::<AppState>() {
+                    state.db.lock().checkpoint();
+                }
+            }
+        });
 }

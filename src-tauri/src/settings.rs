@@ -89,6 +89,26 @@ pub fn default_tables() -> Vec<MultTable> {
             ],
         },
         MultTable {
+            // Betclic ne publie sa grille qu'en image : fréquences observées sur ~800 Spin & Rush
+            // (x2 ≈ 47 %, « 1 chance sur 2 de jouer x3 ou plus »), jackpots d'après l'annonce x5000.
+            id: "betclic-spin-rush".into(),
+            name: "Spin & Rush (Betclic, estimée)".into(),
+            room: "Betclic".into(),
+            buyin: None,
+            entries: vec![
+                MultEntry { mult: 2.0, prob: 0.47, shares: [1.0, 0.0, 0.0] },
+                MultEntry { mult: 3.0, prob: 0.335, shares: [1.0, 0.0, 0.0] },
+                MultEntry { mult: 4.0, prob: 0.12, shares: [1.0, 0.0, 0.0] },
+                MultEntry { mult: 5.0, prob: 0.055, shares: [1.0, 0.0, 0.0] },
+                MultEntry { mult: 10.0, prob: 0.0145, shares: [1.0, 0.0, 0.0] },
+                // observé : 3e place payée 10 % du prize pool à partir de x20
+                MultEntry { mult: 20.0, prob: 0.004, shares: [0.8, 0.1, 0.1] },
+                MultEntry { mult: 100.0, prob: 0.0004, shares: [0.8, 0.1, 0.1] },
+                MultEntry { mult: 1000.0, prob: 0.00004, shares: [0.8, 0.1, 0.1] },
+                MultEntry { mult: 5000.0, prob: 0.000005, shares: [0.8, 0.1, 0.1] },
+            ],
+        },
+        MultTable {
             id: "winamax-expresso".into(),
             name: "Expresso (Winamax)".into(),
             room: "Winamax".into(),
@@ -164,6 +184,15 @@ impl Default for Settings {
 }
 
 impl Settings {
+    /// Ajoute les grilles par défaut des rooms apparues depuis l'enregistrement des réglages.
+    pub fn add_missing_tables(&mut self) {
+        for t in default_tables() {
+            if !self.mult_tables.iter().any(|m| m.id == t.id || m.room.eq_ignore_ascii_case(&t.room)) {
+                self.mult_tables.push(t);
+            }
+        }
+    }
+
     pub fn rakeback_for(&self, room: &str) -> f64 {
         *self.rakeback.get(room).unwrap_or(&self.default_rakeback) / 100.0
     }

@@ -1,0 +1,109 @@
+*** HEADER ***
+Site: Betclic.fr
+Game Mode: Spin
+Game Type: NL Texas Hold'em
+Game Name: Spin & Rush 5€
+Game ID: 01TESTGAME00000000000000AA
+Prize pool: 10.00€
+Multiplier: x2
+Buy In: 5.00€
+Hand ID: 01TESTHAND00000000000000C3
+Date & Time: 2026-09-01 19:02:00 (UTC)
+Table ID: 01TESTTABLE0000000000000AA
+Blinds: 10/20
+Total Pot: 960
+Rake: 0
+*** PLAYERS ***
+Seat 1: Alice (480) [BB]
+Seat 2: HeroB (1020) [BTN SB Hero]
+*** HOLE CARDS ***
+HeroB: [9s 9d]
+*** PRE-FLOP ***
+19:02:01 - HeroB: Posts SB 10
+19:02:01 - Alice: Posts BB 20
+19:02:02 - HeroB: Raises to 60
+19:02:03 - Alice: Raises to 480 and is all-in
+19:02:04 - HeroB: Calls 420
+*** FLOP *** [2h 5c Kd]
+*** TURN *** [2h 5c Kd Js]
+*** RIVER *** [2h 5c Kd Js 4d]
+*** SHOWDOWN ***
+Alice shows [7c 6h] (High Card) [Kd Js 7c 6h 5c]
+HeroB shows [9s 9d] (Pair) [9s 9d Kd Js 5c]
+*** SUMMARY ***
+HeroB wins main pot of 960
+HeroB finished 1st and wins 10.00 EUR
+Alice finished 2nd
+
+------------
+
+*** HEADER ***
+Site: Betclic.fr
+Game Mode: Spin
+Game Type: NL Texas Hold'em
+Game Name: Spin & Rush 5€
+Game ID: 01TESTGAME00000000000000AA
+Prize pool: 10.00€
+Multiplier: x2
+Buy In: 5.00€
+Hand ID: 01TESTHAND00000000000000B2
+Date & Time: 2026-09-01 19:01:00 (UTC)
+Table ID: 01TESTTABLE0000000000000AA
+Blinds: 10/20
+Total Pot: 1020
+Rake: 0
+*** PLAYERS ***
+Seat 1: Alice (500) [BB]
+Seat 2: HeroB (520) [BTN Hero]
+Seat 3: Bob (480) [SB]
+*** HOLE CARDS ***
+HeroB: [Qs Qh]
+*** PRE-FLOP ***
+19:01:01 - Bob: Posts SB 10
+19:01:01 - Alice: Posts BB 20
+19:01:02 - HeroB: Raises to 520 and is all-in
+19:01:03 - Bob: Calls 470 and is all-in
+19:01:04 - Alice: Folds
+*** FLOP *** [2c 7d 9h]
+*** TURN *** [2c 7d 9h Js]
+*** RIVER *** [2c 7d 9h Js 3c]
+*** SHOWDOWN ***
+HeroB shows [Qs Qh] (Pair) [Qs Qh Js 9h 7d]
+Bob shows [Ac Kc] (High Card) [Ac Kc Js 9h 7d]
+*** SUMMARY ***
+HeroB wins main pot of 1020
+Bob finished 3rd
+
+------------
+
+*** HEADER ***
+Site: Betclic.fr
+Game Mode: Spin
+Game Type: NL Texas Hold'em
+Game Name: Spin & Rush 5€
+Game ID: 01TESTGAME00000000000000AA
+Prize pool: 10.00€
+Multiplier: x2
+Buy In: 5.00€
+Hand ID: 01TESTHAND00000000000000A1
+Date & Time: 2026-09-01 19:00:00 (UTC)
+Table ID: 01TESTTABLE0000000000000AA
+Blinds: 10/20
+Total Pot: 80
+Rake: 0
+*** PLAYERS ***
+Seat 1: Alice (500) [BTN]
+Seat 2: HeroB (500) [SB Hero]
+Seat 3: Bob (500) [BB]
+*** HOLE CARDS ***
+HeroB: [Ah 5d]
+*** PRE-FLOP ***
+19:00:01 - HeroB: Posts SB 10
+19:00:01 - Bob: Posts BB 20
+19:00:03 - Alice: Folds
+19:00:04 - HeroB: Raises to 60
+19:00:05 - Bob: Folds
+*** SUMMARY ***
+HeroB wins main pot of 80
+
+------------

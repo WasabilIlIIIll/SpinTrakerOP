@@ -174,6 +174,19 @@ export interface MultRow {
   cev: number;
 }
 
+export interface Session {
+  start: number;
+  end: number;
+  spins: number;
+  hands: number;
+  seconds: number;
+  tables: number;
+  profit: number;
+  ev: number;
+  cev: number;
+  ev_hour: number;
+}
+
 export interface DayCount {
   day: number;
   spins: number;
@@ -445,6 +458,7 @@ export interface ImportResult {
   errors: string[];
   millis: number;
   batch: number;
+  skipped: number;
 }
 
 export interface ImportRow {
@@ -480,8 +494,9 @@ export function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T>
 
 export const api = {
   isReady: () => call<boolean>("is_ready"),
+  startupNotice: () => call<string | null>("startup_notice"),
   overview: () => call<Overview>("overview"),
-  importPaths: (paths: string[]) => call<ImportResult>("import_paths", { paths }),
+  importPaths: (paths: string[], room?: string | null) => call<ImportResult>("import_paths", { paths, room: room || null }),
   summary: (filter: Filter) => call<Summary>("get_summary", { filter }),
   chipsChart: (filter: Filter, axis: string) => call<ChipsChart>("chips_chart", { filter, axis, maxPoints: 3500 }),
   bankrollChart: (filter: Filter, axis: string) => call<BankrollChart>("bankroll_chart", { filter, axis }),
@@ -491,9 +506,10 @@ export const api = {
   resultsBy: (filter: Filter, group: string) => call<Row[]>("results_by", { filter, group }),
   multipliers: (filter: Filter) => call<MultRow[]>("multipliers", { filter }),
   calendar: (filter: Filter) => call<DayCount[]>("calendar", { filter }),
+  sessions: (filter: Filter, gapMinutes: number) => call<Session[]>("sessions", { filter, gapMinutes }),
   tournaments: (filter: Filter, sort: string, desc: boolean, offset: number, limit: number) =>
     call<{ total: number; rows: TRow[] }>("tournaments", { filter, sort, desc, offset, limit }),
-  hands: (q: Record<string, unknown>) => call<{ total: number; rows: HandRow[]; net: number; ev: number }>("hands", { q }),
+  hands: (q: Record<string, unknown>) => call<{ total: number; rows: HandRow[]; net: number; ev: number; tournaments: number; complete: boolean }>("hands", { q }),
   handDetail: (id: string) => call<HandDetail>("hand_detail", { id }),
   tournamentDetail: (id: string) => call<TournamentDetail>("tournament_detail", { id }),
   players: (q: Record<string, unknown>) => call<{ total: number; rows: PlayerRow[] }>("players", { q }),

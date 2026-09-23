@@ -11,6 +11,7 @@ use crate::stats::leaks::{self, LeakReport};
 use crate::stats::summary::{self, Summary};
 use crate::stats::{mean_ci, Filter};
 use crate::AppState;
+use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -48,7 +49,7 @@ pub fn overview(state: State<AppState>) -> R<Value> {
 }
 
 #[tauri::command]
-pub async fn import_paths(app: tauri::AppHandle, state: State<'_, AppState>, paths: Vec<String>) -> R<ImportResult> {
+pub async fn import_paths(app: tauri::AppHandle, state: State<'_, AppState>, paths: Vec<String>, room: Option<String>) -> R<ImportResult> {
     let paths: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
     let store = state.store.clone();
     let db = state.db.clone();
@@ -56,7 +57,7 @@ pub async fn import_paths(app: tauri::AppHandle, state: State<'_, AppState>, pat
         let emit = |p: Progress| {
             let _ = app.emit("import-progress", p);
         };
-        import::run(paths, &store, &db, &emit)
+        import::run_with(paths, room.filter(|r| !r.is_empty()), &store, &db, &emit)
     })
     .await
     .map_err(|e| e.to_string())?;
@@ -101,6 +102,11 @@ pub fn results_by(state: State<AppState>, filter: Filter, group: String) -> Vec<
 #[tauri::command]
 pub fn multipliers(state: State<AppState>, filter: Filter) -> Vec<MultRow> {
     breakdown::multipliers(&state.store.read(), &filter)
+}
+
+#[tauri::command]
+pub fn sessions(state: State<AppState>, filter: Filter, gap_minutes: Option<i64>) -> Vec<breakdown::Session> {
+    breakdown::sessions(&state.store.read(), &filter, gap_minutes.unwrap_or(30) * 60)
 }
 
 #[tauri::command]
@@ -259,6 +265,7 @@ pub fn hands(state: State<AppState>, q: HandQuery) -> Value {
         None => q.filter.select(&s),
     };
     let mut ids: Vec<usize> = Vec::new();
+    let all_hands: usize = tsel.iter().map(|&ti| s.tours[ti].hands.len()).sum();
     for ti in tsel {
         for &hi in &s.tours[ti].hands {
             let r = &s.hands[hi];
@@ -368,7 +375,10 @@ pub fn hands(state: State<AppState>, q: HandQuery) -> Value {
         let p = &r.f.players[r.h.hero as usize];
         (acc.0 + p.net, acc.1 + p.ev)
     });
-    json!({ "total": total, "rows": rows, "net": sums.0, "ev": sums.1 })
+    // nombre de tournois couverts : le CEV (chips EV par tournoi) n'a de sens que si toutes
+    // leurs mains sont retenues
+    let tours: HashSet<usize> = ids.iter().map(|&hi| s.hands[hi].t).collect();
+    json!({ "total": total, "rows": rows, "net": sums.0, "ev": sums.1, "tournaments": tours.len(), "complete": total == all_hands })
 }
 
 #[tauri::command]

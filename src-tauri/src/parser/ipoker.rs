@@ -109,7 +109,29 @@ pub fn parse(content: &str, source: &str) -> Result<ParsedFile, String> {
         }
     };
 
-    let room = "PMU".to_string();
+    // le XML iPoker est identique d'un skin à l'autre : la room se déduit du contenu ou du
+    // chemin (comme dans fpdb). Laissée vide si rien ne l'indique : l'import la déduit alors
+    // du pseudo du héros (déjà vu sur une room), PMU par défaut.
+    let mut lower = source.to_lowercase();
+    if content.get(..4096.min(content.len())).unwrap_or(content).to_lowercase().contains("betclic") {
+        lower.push_str(" betclic");
+    }
+    let room = ["betclic", "unibet", "pmu", "fdj", "barriere", "partouche", "netbet", "bwin", "redbet"]
+        .iter()
+        .find(|k| lower.contains(*k))
+        .map(|k| match *k {
+            "betclic" => "Betclic",
+            "unibet" => "Unibet",
+            "fdj" => "FDJ",
+            "barriere" => "Barrière",
+            "partouche" => "Partouche",
+            "netbet" => "NetBet",
+            "bwin" => "Bwin",
+            "redbet" => "Redbet",
+            _ => "PMU",
+        })
+        .unwrap_or("")
+        .to_string();
     let tid = format!("ipk:{tcode}");
     let mut hands = Vec::new();
     let mut starting_stack = 0.0;

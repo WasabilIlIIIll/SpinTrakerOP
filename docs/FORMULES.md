@@ -101,6 +101,14 @@ E_k = b × Σ_m p(m)·m·λ·share_k(m)     (gain espéré à la place k, en €
 
 Sur un Twister 5 € : `N × c / b = 3 × 4,65 / 5 = 2,79`, donc le prize pool moyen vaut 13,95 €.
 
+**Exception Betclic (Spin & Rush)** : l'historique donne un buy-in unique (« 2.00€ ») sans
+le rake, que Betclic annonce entre 3 et 6 % selon le multiplicateur. Le tracker retient
+`r = 5 % × b`, soit `N × c / b = 2,85`. Sa grille de multiplicateurs n'est publiée qu'en image :
+la table par défaut « Spin & Rush (Betclic, estimée) » reprend les fréquences observées sur
+~800 tournois (x2 ≈ 47 %, x3 ≈ 34 %, x4 ≈ 12 %, x5 ≈ 5 %) et la répartition constatée
+(vainqueur seul jusqu'à x10, 3ᵉ place payée à partir de x20). Le multiplicateur et le prize
+pool réels de chaque tournoi figurant dans l'historique, l'EV Multi-profit, lui, est exact.
+
 Les quatre mesures de profit, toutes rakeback inclus (`+ rb × r` par tournoi) :
 
 | Mesure | Formule | Ce qu'elle neutralise |

@@ -1,6 +1,9 @@
 //! Détection du format et lecture des fichiers (fichiers, dossiers, archives zip).
 
+pub mod betclic;
+pub mod common;
 pub mod ipoker;
+pub mod stars;
 pub mod winamax;
 
 use crate::model::{Hand, Tournament};
@@ -48,6 +51,26 @@ pub fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     era * 146097 + doe - 719468
 }
 
+/// Heure UTC -> heure de Paris (CET/CEST, changement d'heure européen à 01:00 UTC le
+/// dernier dimanche de mars et d'octobre). Les horodatages de l'application sont en heure
+/// locale naïve, comme les historiques PMU.
+pub fn utc_to_paris(ts: i64) -> i64 {
+    let y = 1970 + ts.div_euclid(31_556_952);
+    let last_sunday = |m: i64| {
+        let d = days_from_civil(y, m, 31);
+        d - (d + 4).rem_euclid(7)
+    };
+    let (a, b) = (last_sunday(3) * 86400 + 3600, last_sunday(10) * 86400 + 3600);
+    ts + if ts >= a && ts < b { 7200 } else { 3600 }
+}
+
+/// Comme `parse_date`, en convertissant en heure de Paris les dates marquées UTC/GMT.
+pub fn parse_date_tz(s: &str) -> Option<i64> {
+    let ts = parse_date(s)?;
+    let u = s.to_ascii_uppercase();
+    Some(if u.contains("UTC") || u.contains("GMT") { utc_to_paris(ts) } else { ts })
+}
+
 /// "2026-09-19 22:26:13" ou "2026/09/19 22:26:13" -> secondes (heure locale naïve)
 pub fn parse_date(s: &str) -> Option<i64> {
     let s = s.trim();
@@ -69,6 +92,12 @@ pub fn parse_source(src: &RawSource) -> Result<Vec<ParsedFile>, String> {
     }
     if winamax::looks_like(c) {
         return winamax::parse(c, &src.name);
+    }
+    if betclic::looks_like(c) {
+        return betclic::parse(c, &src.name);
+    }
+    if stars::looks_like(c) {
+        return stars::parse(c, &src.name);
     }
     Err("format non reconnu".into())
 }

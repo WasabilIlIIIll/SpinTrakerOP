@@ -1,6 +1,6 @@
 //! Parser Winamax (Expresso) — historiques texte + fichiers "summary". Statut : bêta.
 
-use super::{parse_date, parse_num, ParsedFile};
+use super::{parse_date_tz, parse_num, ParsedFile};
 use crate::model::*;
 
 pub fn looks_like(c: &str) -> bool {
@@ -79,7 +79,7 @@ fn parse_summary(c: &str, source: &str) -> Result<Vec<ParsedFile>, String> {
         } else if let Some(v) = l.strip_prefix("Prizepool : ") {
             t.prize_pool = parse_num(v);
         } else if let Some(v) = l.strip_prefix("Tournament started ") {
-            t.start = parse_date(v).unwrap_or(0);
+            t.start = parse_date_tz(v).unwrap_or(0);
         } else if let Some(v) = l.strip_prefix("You played ") {
             let mut n = String::new();
             for ch in v.chars() {
@@ -183,7 +183,7 @@ fn parse_hand(lines: &[&str]) -> Option<HandOut> {
         2 => (0.0, bl[0], bl[1]),
         _ => (0.0, 0.0, 0.0),
     };
-    let ts = head.rsplit(" - ").next().and_then(parse_date).unwrap_or(0);
+    let ts = head.rsplit(" - ").next().and_then(parse_date_tz).unwrap_or(0);
     let table = lines.get(1)?;
     let tid = format!("wmx:{}", tid_from_table(table)?);
     let btn_seat: u8 = between(table, "Seat #", " is").and_then(|s| s.parse().ok()).unwrap_or(0);

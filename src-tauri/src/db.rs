@@ -36,6 +36,22 @@ impl Db {
         Ok(Db { conn })
     }
 
+    /// Contrôle rapide d'intégrité (quelques ms) : faux si la base est endommagée.
+    pub fn quick_ok(&self) -> bool {
+        self.conn.query_row("PRAGMA quick_check", [], |r| r.get::<_, String>(0)).map(|v| v == "ok").unwrap_or(false)
+    }
+
+    /// Reporte le journal WAL dans le fichier principal : la base devient autonome sur disque.
+    pub fn checkpoint(&self) {
+        let _ = self.conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
+    }
+
+    /// Copie cohérente de la base (même pendant l'utilisation).
+    pub fn snapshot(&self, dest: &Path) -> Result<(), String> {
+        let _ = std::fs::remove_file(dest);
+        self.conn.execute("VACUUM INTO ?1", [dest.to_string_lossy().to_string()]).map(|_| ()).map_err(|e| e.to_string())
+    }
+
     pub fn load_tournaments(&self) -> Result<Vec<Tournament>, String> {
         let mut st = self.conn.prepare("SELECT data FROM tournaments").map_err(|e| e.to_string())?;
         let rows = st

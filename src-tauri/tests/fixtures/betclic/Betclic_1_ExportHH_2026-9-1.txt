@@ -1,0 +1,74 @@
+Hand ID: 5001
+Game ID: 77001
+Game Name: Twister 5€
+Table ID: 3001
+Game Type: Hold'em No Limit
+Game Mode: Tournament
+Buy In: 4.65€ + 0.35€
+Date & Time: 2026-09-01 21:00:00
+Ante: 0
+Blinds: 10/20
+*** PLAYERS ***
+Seat 1: Alice (500) [BTN]
+Seat 2: HeroB (500) [SB Hero]
+Seat 3: Bob (500) [BB]
+*** PRE-FLOP ***
+21:00:01 - HeroB: Posts SB 10
+21:00:01 - Bob: Posts BB 20
+21:00:03 - Alice: Fold
+21:00:04 - HeroB: Raises to 60
+21:00:05 - Bob: Fold
+---
+Hand ID: 5002
+Game ID: 77001
+Game Name: Twister 5€
+Table ID: 3001
+Game Type: Hold'em No Limit
+Game Mode: Tournament
+Buy In: 4.65€ + 0.35€
+Date & Time: 2026-09-01 21:01:00
+Ante: 0
+Blinds: 10/20
+*** PLAYERS ***
+Seat 1: Alice (500) [BB]
+Seat 2: HeroB (520) [BTN Hero]
+Seat 3: Bob (480) [SB]
+*** PRE-FLOP ***
+21:01:01 - Bob: Posts SB 10
+21:01:01 - Alice: Posts BB 20
+21:01:02 - HeroB: Raises to 520 and is all-in
+21:01:03 - Bob: Calls 470 and is all-in
+21:01:04 - Alice: Fold
+*** FLOP *** [2c 7d 9h]
+*** TURN *** [Js]
+*** RIVER *** [3c]
+*** SHOWDOWN ***
+21:01:06 - HeroB: Shows [Qs Qh]
+21:01:06 - Bob: Shows [Ac Kc]
+---
+Hand ID: 5003
+Game ID: 77001
+Game Name: Twister 5€
+Table ID: 3001
+Game Type: Hold'em No Limit
+Game Mode: Tournament
+Buy In: 4.65€ + 0.35€
+Date & Time: 2026-09-01 21:02:00
+Ante: 0
+Blinds: 10/20
+*** PLAYERS ***
+Seat 1: Alice (480) [BB]
+Seat 2: HeroB (1020) [BTN SB Hero]
+*** PRE-FLOP ***
+21:02:01 - HeroB: Posts SB 10
+21:02:01 - Alice: Posts BB 20
+21:02:02 - HeroB: Raises to 60
+21:02:03 - Alice: Raises to 480 and is all-in
+21:02:04 - HeroB: Calls 420
+*** FLOP *** [2h 5c Kd]
+*** TURN *** [Js]
+*** RIVER *** [4d]
+*** SHOWDOWN ***
+21:02:06 - Alice: Shows [7c 6h]
+21:02:06 - HeroB: Shows [9s 9d]
+---

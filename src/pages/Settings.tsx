@@ -23,6 +23,7 @@ function toHex(c: string): string {
 const SECTION_NAMES: Record<string, string> = {
   tiles: "Tuiles de synthèse",
   position: "CEV par position",
+  sessions: "Sessions",
   results: "Résultats groupés",
   profile: "CEV par profil de table",
   multitabling: "Multi-tabling",

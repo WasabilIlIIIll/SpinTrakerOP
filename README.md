@@ -29,6 +29,7 @@ Application de bureau, 100 % hors ligne, vos données restent chez vous.
 | **Leak finder** | Arbre complet de vos décisions préflop par position, situation et tranche de tapis, avec grille 13×13 des mains jouées, et comparaison à la population, aux regs ou à vos propres cibles. Stats postflop (c-bet, fold vs c-bet, check-raise, barrel, WTSD…). |
 | **Replayer & Review** | Rejouez chaque main sur une table animée : cartes, tapis, mises, équité au tapis, CEV vs résultat réel. Marquez une main d'une étoile pour la retrouver dans l'onglet Review. |
 | **Challenges** | Objectifs de volume, d'heures, de profit, de rakeback, de CEV ou de bankroll sur une période, avec rythme requis et suivi quotidien. |
+| **Sessions** | Vos sessions reconstituées automatiquement (pause réglable) : durée, spins, CEV, EV et profit de chacune. |
 | **Personnalisation** | 6 thèmes, couleur d'accent libre, couleurs de courbes, densité, taille du texte, indicateurs du tableau de bord réordonnables, mode discret (floutage), français / anglais. |
 
 ## Installation
@@ -72,7 +73,20 @@ totalement faux.
 | Room | Format | Statut |
 |---|---|---|
 | PMU / réseau iPoker (Twister) | `.xml` | ✅ complet |
+| Betclic (Spin & Rush, logiciel actuel) | `.txt` « ExportHH » ou le `.zip` tel quel | ✅ vérifié sur 12 000 mains réelles |
+| Betclic (ancien logiciel iPoker) | `.xml` | ✅ même format que PMU |
 | Winamax (Expresso) | `.txt` + résumés de tournoi | 🧪 bêta |
+| Unibet (Spin) | `.txt` | 🧪 bêta |
+| PokerStars (Spin & Go) | `.txt` + résumés | 🧪 bêta |
+
+La **room est détectée automatiquement** : par le format pour Betclic, Winamax, Unibet et
+PokerStars ; pour les `.xml` iPoker (identiques entre PMU et l'ancien Betclic), par le
+contenu, le chemin du dossier, puis le pseudo du héros déjà vu sur une room — PMU par défaut.
+Les heures données en UTC (Betclic, Winamax, Unibet) sont converties en heure de Paris.
+
+Les « bêta » sont écrits d'après les formats publiés (fpdb et autres projets libres) et
+validés sur des historiques synthétiques : un fichier réel anonymisé dans une issue suffit
+à les passer en « vérifié ».
 
 Un autre format à ajouter ? Ouvrez une issue avec un fichier d'exemple anonymisé :
 l'architecture des parsers est prévue pour ça (`src-tauri/src/parser/`).
@@ -101,6 +115,8 @@ Toutes les tailles (Windows, macOS, Linux, favicon) sont regénérées automatiq
 ## Vie privée
 
 Aucune donnée ne quitte votre machine, aucune requête réseau, aucun compte.
+La base est **sauvegardée automatiquement chaque jour** (7 dernières copies, dossier
+`sauvegardes/`) ; si elle est endommagée au démarrage, la dernière sauvegarde est restaurée.
 Tout est stocké dans une base SQLite locale (Paramètres → Données pour l'emplacement,
 la sauvegarde et l'export CSV).
 

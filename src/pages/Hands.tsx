@@ -97,7 +97,20 @@ export function Hands() {
         {data && (
           <div className="hand-sum">
             <span>
-              {num(data.total)} mains · chips réels <b className={tone(data.net)}>{signed(data.net, 0)}</b> · CEV <b className={tone(data.ev)}>{signed(data.ev, 0)}</b>
+              {num(data.total)} mains · chips réels <b className={tone(data.net)}>{signed(data.net, 0)}</b> · chips all-in ajustés{" "}
+              <b className={tone(data.ev)}>{signed(data.ev, 0)}</b>
+              {data.complete && data.tournaments > 0 ? (
+                <>
+                  {" "}
+                  · CEV <b className={tone(data.ev)}>{signed(data.ev / data.tournaments, 1)}</b> / tournoi
+                </>
+              ) : data.total > 0 ? (
+                <>
+                  {" "}
+                  · <b className={tone(data.ev)}>{signed(data.ev / data.total, 2)}</b> / main
+                </>
+              ) : null}
+              <Help text="Les totaux additionnent les jetons de toutes les mains listées. Le CEV est la moyenne par tournoi (chips all-in ajustés ÷ nombre de tournois) : c'est le chiffre du tableau de bord. Avec un filtre de main (cartes, scénario, pot…), seule la moyenne par main a un sens." />
             </span>
           </div>
         )}
@@ -131,7 +144,7 @@ export function Hands() {
                     Chips
                   </th>
                   <th className="r sortable" onClick={() => click("ev")}>
-                    CEV <Help text="Résultat de la main en jetons, all-in ajusté : sur un tapis avant la river, le résultat réel est remplacé par l'espérance (équité × pot). Ce n'est pas un montant en euros." />
+                    CEV <Help text="CEV de la main : résultat en jetons, all-in ajusté : sur un tapis avant la river, le résultat réel est remplacé par l'espérance (équité × pot). Ce n'est pas un montant en euros." />
                   </th>
                   <th className="r sortable" onClick={() => click("luck")}>
                     Écart <Help text="Chips réels − CEV : positif = vous avez gagné plus que votre espérance sur les tapis de cette main." />

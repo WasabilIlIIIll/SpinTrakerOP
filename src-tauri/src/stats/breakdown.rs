@@ -305,3 +305,57 @@ pub fn calendar(s: &Store, f: &Filter) -> Vec<DayCount> {
     }
     m.into_values().collect()
 }
+
+#[derive(Serialize, Default)]
+pub struct Session {
+    pub start: i64,
+    pub end: i64,
+    pub spins: usize,
+    pub hands: usize,
+    pub seconds: i64,
+    pub tables: f64,
+    pub profit: f64,
+    pub ev: f64,
+    pub cev: f64,
+    pub ev_hour: f64,
+}
+
+/// Sessions : suites de spins sans pause de plus de `gap` secondes (30 min par défaut).
+pub fn sessions(s: &Store, f: &Filter, gap: i64) -> Vec<Session> {
+    let mut sel = f.select(s);
+    sel.sort_by_key(|&i| s.tours[i].t.start);
+    let mut out: Vec<Session> = Vec::new();
+    let mut cur: Vec<usize> = Vec::new();
+    let mut cur_end = i64::MIN;
+    let flush = |ids: &Vec<usize>, out: &mut Vec<Session>| {
+        if ids.is_empty() {
+            return;
+        }
+        let sm = super::summary::summary_of(s, ids);
+        let h = (sm.seconds as f64 / 3600.0).max(1e-9);
+        out.push(Session {
+            start: ids.iter().map(|&i| s.tours[i].t.start).min().unwrap_or(0),
+            end: ids.iter().map(|&i| s.tours[i].t.end).max().unwrap_or(0),
+            spins: sm.tournaments,
+            hands: sm.hands,
+            seconds: sm.seconds,
+            tables: sm.avg_tables,
+            profit: sm.profit.real_rb,
+            ev: sm.profit.ev,
+            cev: sm.cev,
+            ev_hour: sm.profit.ev / h,
+        });
+    };
+    for i in sel {
+        let t = &s.tours[i].t;
+        if !cur.is_empty() && t.start > cur_end + gap {
+            flush(&cur, &mut out);
+            cur.clear();
+        }
+        cur_end = if cur.is_empty() { t.end } else { cur_end.max(t.end) };
+        cur.push(i);
+    }
+    flush(&cur, &mut out);
+    out.reverse();
+    out
+}

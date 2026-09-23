@@ -45,6 +45,7 @@ export const THEMES: Theme[] = [
     name: "Lumière",
     dark: false,
     vars: {
+      "--menu": "#ffffff",
       "--bg": "#f4f5f7",
       "--bg-grad": "radial-gradient(1200px 700px at 12% -10%, #ffffff 0%, transparent 60%), radial-gradient(900px 600px at 100% 0%, #eef1f6 0%, transparent 55%)",
       "--bg2": "rgba(255,255,255,0.55)",
@@ -77,6 +78,7 @@ export const THEMES: Theme[] = [
     name: "Nuit",
     dark: true,
     vars: {
+      "--menu": "#17191d",
       "--bg": "#0a0b0d",
       "--bg-grad": "radial-gradient(1100px 650px at 10% -10%, rgba(255,255,255,0.06) 0%, transparent 60%), radial-gradient(900px 600px at 100% 0%, rgba(120,140,255,0.05) 0%, transparent 55%)",
       "--bg2": "rgba(255,255,255,0.03)",
@@ -109,6 +111,7 @@ export const THEMES: Theme[] = [
     name: "Brume",
     dark: false,
     vars: {
+      "--menu": "#fbfcfe",
       "--bg": "#eef1f5",
       "--bg-grad": "radial-gradient(1000px 600px at 20% -10%, #ffffff 0%, transparent 55%), radial-gradient(800px 500px at 90% 10%, #e6ecf5 0%, transparent 60%)",
       "--bg2": "rgba(255,255,255,0.5)",
@@ -141,6 +144,7 @@ export const THEMES: Theme[] = [
     name: "Tapis vert",
     dark: true,
     vars: {
+      "--menu": "#10221a",
       "--bg": "#07130f",
       "--bg-grad": "radial-gradient(1100px 650px at 15% -10%, rgba(64,200,140,0.10) 0%, transparent 60%), radial-gradient(900px 600px at 95% 5%, rgba(255,255,255,0.03) 0%, transparent 55%)",
       "--bg2": "rgba(255,255,255,0.03)",
@@ -173,6 +177,7 @@ export const THEMES: Theme[] = [
     name: "Midnight Vegas",
     dark: true,
     vars: {
+      "--menu": "#131732",
       "--bg": "#070912",
       "--bg-grad": "radial-gradient(1100px 650px at 10% -10%, rgba(120,90,255,0.12) 0%, transparent 60%), radial-gradient(900px 600px at 100% 0%, rgba(255,60,150,0.10) 0%, transparent 55%)",
       "--bg2": "rgba(255,255,255,0.03)",
@@ -206,6 +211,7 @@ export const THEMES: Theme[] = [
 export const EDITABLE_VARS: [string, string][] = [
   ["--bg", "Fond"],
   ["--surface", "Panneaux"],
+  ["--menu", "Menus et fenêtres"],
   ["--border", "Bordures"],
   ["--text", "Texte"],
   ["--muted", "Texte secondaire"],
@@ -236,6 +242,8 @@ export function applyTheme(id: string, accent?: string | null, overrides?: Recor
   }
   if (overrides) for (const [k, v] of Object.entries(overrides)) if (v) root.style.setProperty(k, v);
   root.dataset.theme = th.dark ? "dark" : "light";
+  // menus natifs (listes déroulantes, calendriers, barres de défilement) dans le bon mode
+  root.style.colorScheme = th.dark ? "dark" : "light";
 }
 
 export function cssVar(name: string): string {

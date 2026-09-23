@@ -14,6 +14,8 @@ interface Props {
   height?: number;
   fmt?: (v: number) => string;
   sub?: string[];
+  /** lignes d'information affichées au survol, par catégorie */
+  details?: string[][];
   onPick?: (i: number) => void;
 }
 
@@ -24,10 +26,10 @@ function niceStep(range: number) {
   return (n < 1.5 ? 1 : n < 3 ? 2 : n < 7 ? 5 : 10) * p;
 }
 
-export function BarChart({ categories, groups, height = 300, fmt = (v) => num(v, Math.abs(v) < 10 ? 1 : 0), sub, onPick }: Props) {
+export function BarChart({ categories, groups, height = 300, fmt = (v) => num(v, Math.abs(v) < 10 ? 1 : 0), sub, details, onPick }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [w, setW] = useState(600);
-  const [hover, setHover] = useState<number | null>(null);
+  const [hover, setHover] = useState<{ i: number; x: number; y: number } | null>(null);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -60,7 +62,7 @@ export function BarChart({ categories, groups, height = 300, fmt = (v) => num(v,
   const ticks: number[] = [];
   for (let v = lo; v <= hi + 1e-9; v += step) ticks.push(v);
   return (
-    <div ref={ref} className="bc">
+    <div ref={ref} className="bc" onMouseLeave={() => setHover(null)}>
       <svg width={w} height={height}>
         {ticks.map((t) => (
           <g key={t}>
@@ -74,8 +76,16 @@ export function BarChart({ categories, groups, height = 300, fmt = (v) => num(v,
           const cx = padL + cw * i + cw / 2;
           const gx = cx - (bw * groups.length) / 2;
           return (
-            <g key={c} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} onClick={() => onPick?.(i)} style={{ cursor: onPick ? "pointer" : undefined }}>
-              <rect x={padL + cw * i} y={padT} width={cw} height={ih} className={hover === i ? "bc-hover" : "bc-hit"} />
+            <g
+              key={c}
+              onMouseMove={(e) => {
+                const r = ref.current!.getBoundingClientRect();
+                setHover({ i, x: e.clientX - r.left, y: e.clientY - r.top });
+              }}
+              onClick={() => onPick?.(i)}
+              style={{ cursor: onPick ? "pointer" : "default" }}
+            >
+              <rect x={padL + cw * i} y={padT} width={cw} height={ih} className={hover?.i === i ? "bc-hover" : "bc-hit"} />
               {groups.map((g, k) => {
                 const v = g.values[i] ?? 0;
                 const x0 = gx + k * bw + 2;
@@ -116,6 +126,26 @@ export function BarChart({ categories, groups, height = 300, fmt = (v) => num(v,
           );
         })}
       </svg>
+      {hover && (
+        <div className="bc-tip" style={{ left: Math.min(hover.x + 14, w - 210), top: Math.max(4, hover.y - 10) }}>
+          <b>{categories[hover.i]}</b>
+          {groups.map((g) => (
+            <div key={g.label} className="bc-tip-r">
+              <i style={{ background: g.color }} />
+              {g.label}
+              <span>
+                {fmt(g.values[hover.i] ?? 0)}
+                {g.ci?.[hover.i] ? <small> ± {num(g.ci[hover.i], 0)}</small> : null}
+              </span>
+            </div>
+          ))}
+          {details?.[hover.i]?.map((d) => (
+            <div key={d} className="bc-tip-d">
+              {d}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

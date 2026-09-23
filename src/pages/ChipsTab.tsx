@@ -4,7 +4,6 @@ import { useApp, useQuery } from "../lib/state";
 import { LineChart, type LineSeries } from "../components/LineChart";
 import { Icon } from "../components/Icon";
 import { Dropdown, Empty, Loading, NumInput, Seg, Help } from "../components/ui";
-import { luckLabel } from "../components/KpiRow";
 import { cls, num } from "../lib/format";
 import { t } from "../lib/i18n";
 
@@ -23,7 +22,6 @@ export function ChipsTab({ full, onFull }: { full?: boolean; onFull?: () => void
   const { filter, prefs, setPrefs, settings, saveSettings } = useApp();
   const axis = prefs.chipsAxis;
   const { data, loading } = useQuery(["chips", filter, axis], () => api.chipsChart(filter, axis));
-  const { data: sum } = useQuery(["summary", filter], () => api.summary(filter));
   const visible = prefs.chipsSeries;
   const series: LineSeries[] = useMemo(() => {
     if (!data) return [];
@@ -49,7 +47,6 @@ export function ChipsTab({ full, onFull }: { full?: boolean; onFull?: () => void
   }, [data, prefs.showCi, axis]);
   const notes = useMemo(() => (prefs.showNotes && data ? data.notes : []), [data, prefs.showNotes]);
   const toggle = (k: string) => setPrefs({ chipsSeries: visible.includes(k) ? visible.filter((x) => x !== k) : [...visible, k] });
-  const luck = sum ? luckLabel(sum.luck_z) : null;
   const others = CHIP_SERIES.filter((s) => !s.main);
 
   if (!loading && data && data.tournaments === 0) {
@@ -58,15 +55,6 @@ export function ChipsTab({ full, onFull }: { full?: boolean; onFull?: () => void
   return (
     <div className={cls("chart-card", full && "full")}>
       <div className="chart-stage">
-        {luck && (
-          <div className={cls("ov ov-tl luck", luck.tone)} title="Chance calculée sur l'écart entre jetons réels et EV des all-in">
-            <Icon name={luck.icon} size={17} />
-            <div>
-              <b>{luck.label}</b>
-              <span>{luck.sub}</span>
-            </div>
-          </div>
-        )}
         <div className="ov ov-tr">
           {data && (
             <div className="chart-meta">

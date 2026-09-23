@@ -262,8 +262,17 @@ impl Store {
                 _ => p[0] * e_prize[0] + p[1] * e_prize[1] + p[2] * e_prize[2] - t.buyin,
             };
             // gains réels : si non renseignés mais place connue, on reconstruit
-            if ti.winnings <= 0.0 && ti.t.winnings <= 0.0 && (1..=3).contains(&ti.place) && t.prize_pool > 0.0 {
-                ti.winnings = t.prize_pool * shares[(ti.place - 1) as usize];
+            if ti.winnings <= 0.0 && ti.t.winnings <= 0.0 && (1..=3).contains(&ti.place) {
+                ti.winnings = if t.prize_pool > 0.0 {
+                    t.prize_pool * shares[(ti.place - 1) as usize]
+                } else {
+                    // prize pool absent de l'historique (export Betclic) : gain moyen théorique
+                    e_prize[(ti.place - 1) as usize]
+                };
+            }
+            if t.prize_pool <= 0.0 {
+                // multiplicateur inconnu : l'EV multi-profit se confond avec l'EV profit
+                ti.ev_multi = ti.ev_theo;
             }
             ti.real = ti.winnings - t.buyin;
         }

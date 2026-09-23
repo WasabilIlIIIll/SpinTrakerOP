@@ -27,6 +27,7 @@ export interface UiPrefs {
   replaySpeed: number;
   leakRef: string;
   statsSections: string[];
+  statsWidths: Record<string, number>;
   savedFilters: { name: string; filter: Filter }[];
   showCi: boolean;
   showNotes: boolean;
@@ -38,7 +39,7 @@ export interface UiPrefs {
 }
 
 export const ALL_KPIS = ["tournaments", "cev", "rakeback", "profit", "roi", "hourly", "time", "luck", "finish", "avg_buyin", "spins_h", "min_cev"];
-export const ALL_STATS_SECTIONS = ["tiles", "position", "results", "profile", "multitabling", "finishers", "multipliers", "stack", "hours", "weekdays"];
+export const ALL_STATS_SECTIONS = ["tiles", "position", "sessions", "results", "multipliers", "multitabling", "finishers", "profile", "stack", "hours", "weekdays"];
 
 export const DEFAULT_PREFS: UiPrefs = {
   theme: "clair",
@@ -63,6 +64,7 @@ export const DEFAULT_PREFS: UiPrefs = {
   replaySpeed: 1,
   leakRef: "population",
   statsSections: ALL_STATS_SECTIONS,
+  statsWidths: {},
   savedFilters: [],
   showCi: true,
   showNotes: true,
@@ -133,6 +135,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
             // migration des anciens identifiants de thème
             const map: Record<string, string> = { highroller: "nuit", ivory: "clair", felt: "tapis", royal: "vegas" };
             if (raw.theme && map[raw.theme]) raw.theme = map[raw.theme];
+            // nouveau bloc « Sessions » : ajouté aux dispositions existantes
+            if (Array.isArray(raw.statsSections) && raw.statsWidths === undefined && !raw.statsSections.includes("sessions")) {
+              const i = raw.statsSections.indexOf("position");
+              raw.statsSections.splice(i >= 0 ? i + 1 : 0, 0, "sessions");
+            }
             const p = { ...DEFAULT_PREFS, ...raw };
             setPrefsState(p);
           } catch {
@@ -199,6 +206,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       stop = true;
       unlisten?.();
     };
+  }, []);
+
+  useEffect(() => {
+    api
+      .startupNotice()
+      .then((n) => n && window.setTimeout(() => window.alert(n), 300))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {

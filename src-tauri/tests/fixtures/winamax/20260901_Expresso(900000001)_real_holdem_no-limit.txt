@@ -1,0 +1,64 @@
+Winamax Poker - Tournament "Expresso" buyIn: 4.60€ + 0.40€ level: 1 - HandId: #111111111-1-1700000000 - Holdem no limit (10/20) - 2026/09/01 20:00:00 UTC
+Table: 'Expresso(900000001)#0' 3-max (real money) Seat #1 is the button
+Seat 1: Alice (500)
+Seat 2: MrTest (500)
+Seat 3: Bob (500)
+*** ANTE/BLINDS ***
+MrTest posts small blind 10
+Bob posts big blind 20
+Dealt to MrTest [Ah Kd]
+*** PRE-FLOP ***
+Alice folds
+MrTest raises 40 to 60
+Bob folds
+MrTest collected 40 from pot
+*** SUMMARY ***
+Total pot 40 | No rake
+Seat 2: MrTest (small blind) won 40
+
+Winamax Poker - Tournament "Expresso" buyIn: 4.60€ + 0.40€ level: 1 - HandId: #111111111-2-1700000060 - Holdem no limit (10/20) - 2026/09/01 20:01:00 UTC
+Table: 'Expresso(900000001)#0' 3-max (real money) Seat #2 is the button
+Seat 1: Alice (500)
+Seat 2: MrTest (520)
+Seat 3: Bob (480)
+*** ANTE/BLINDS ***
+Bob posts small blind 10
+Alice posts big blind 20
+Dealt to MrTest [Qs Qh]
+*** PRE-FLOP ***
+MrTest raises 500 to 520 and is all-in
+Bob calls 470 and is all-in
+Alice folds
+*** FLOP *** [2c 7d 9h]
+*** TURN *** [2c 7d 9h][Js]
+*** RIVER *** [2c 7d 9h Js][3c]
+*** SHOW DOWN ***
+MrTest shows [Qs Qh] (One pair : Queens)
+Bob shows [Ac Kc] (High card : Ace)
+MrTest collected 980 from pot
+*** SUMMARY ***
+Total pot 980 | No rake
+Board: [2c 7d 9h Js 3c]
+Seat 2: MrTest (button) showed [Qs Qh] and won 980 with One pair : Queens
+
+Winamax Poker - Tournament "Expresso" buyIn: 4.60€ + 0.40€ level: 1 - HandId: #111111111-3-1700000120 - Holdem no limit (10/20) - 2026/09/01 20:02:00 UTC
+Table: 'Expresso(900000001)#0' 3-max (real money) Seat #2 is the button
+Seat 1: Alice (480)
+Seat 2: MrTest (1020)
+*** ANTE/BLINDS ***
+MrTest posts small blind 10
+Alice posts big blind 20
+Dealt to MrTest [9s 9d]
+*** PRE-FLOP ***
+MrTest raises 40 to 60
+Alice raises 420 to 480 and is all-in
+MrTest calls 420
+*** FLOP *** [2h 5c Kd]
+*** TURN *** [2h 5c Kd][Js]
+*** RIVER *** [2h 5c Kd Js][4d]
+*** SHOW DOWN ***
+Alice shows [7c 6h] (High card : King)
+MrTest shows [9s 9d] (One pair : Nines)
+MrTest collected 960 from pot
+*** SUMMARY ***
+Total pot 960 | No rake

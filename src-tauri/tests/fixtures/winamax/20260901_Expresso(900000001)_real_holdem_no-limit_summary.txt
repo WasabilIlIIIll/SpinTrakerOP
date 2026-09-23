@@ -1,0 +1,12 @@
+Winamax Poker - Tournament summary : Expresso(900000001)
+Player : MrTest
+Buy-In : 4.60€ + 0.40€
+Registered players : 3
+Mode : sng
+Type : normal
+Speed : turbo
+Prizepool : 10€
+Tournament started 2026/09/01 20:00:00 UTC
+You played 2min 30s
+You finished in 1st place
+You won 10€

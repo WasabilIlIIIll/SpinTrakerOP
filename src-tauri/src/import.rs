@@ -35,6 +35,17 @@ pub struct Progress {
 }
 
 pub fn run(paths: Vec<PathBuf>, store: &parking_lot::RwLock<Store>, db: &parking_lot::Mutex<Db>, progress: &(dyn Fn(Progress) + Sync)) -> ImportResult {
+    run_with(paths, None, store, db, progress)
+}
+
+/// `room` : room imposée aux fichiers iPoker (sinon détectée : contenu, chemin, pseudo du héros).
+pub fn run_with(
+    paths: Vec<PathBuf>,
+    room: Option<String>,
+    store: &parking_lot::RwLock<Store>,
+    db: &parking_lot::Mutex<Db>,
+    progress: &(dyn Fn(Progress) + Sync),
+) -> ImportResult {
     let t0 = std::time::Instant::now();
     let files = collect_paths(&paths);
     // libellé lisible de l'import (dossier ou nom de fichier)
@@ -58,6 +69,17 @@ pub fn run(paths: Vec<PathBuf>, store: &parking_lot::RwLock<Store>, db: &parking
         })
         .collect();
 
+    // room des XML iPoker non identifiée : celle où le pseudo du héros a déjà été vu
+    let hero_room: HashMap<String, String> = {
+        let mut seen: HashMap<String, HashSet<String>> = HashMap::new();
+        let st = store.read();
+        let known = st.tours.iter().map(|t| &t.t).filter(|t| !t.id.starts_with("ipk:"));
+        let fresh = parsed.iter().filter_map(|(_, r, _)| r.as_ref().ok()).flatten().map(|pf| &pf.tournament);
+        for t in known.chain(fresh).filter(|t| !t.room.is_empty()) {
+            seen.entry(t.hero.clone()).or_default().insert(t.room.clone());
+        }
+        seen.into_iter().filter(|(_, r)| r.len() == 1).map(|(h, r)| (h, r.into_iter().next().unwrap())).collect()
+    };
     let mut res = ImportResult { sources: parsed.len(), ..Default::default() };
     let existing: HashSet<String> = {
         let st = store.read();
@@ -92,7 +114,15 @@ pub fn run(paths: Vec<PathBuf>, store: &parking_lot::RwLock<Store>, db: &parking
                             new_hands.push(h);
                         }
                     }
-                    let t = pf.tournament;
+                    let mut t = pf.tournament;
+                    if let Some(r) = &room {
+                        if t.id.starts_with("ipk:") {
+                            t.room = r.clone();
+                        }
+                    }
+                    if t.room.is_empty() {
+                        t.room = hero_room.get(&t.hero).cloned().unwrap_or_else(|| "PMU".into());
+                    }
                     match new_tours.get_mut(&t.id) {
                         Some(ex) => crate::store::merge_tournament(ex, t),
                         None => {
@@ -155,6 +185,8 @@ pub fn run(paths: Vec<PathBuf>, store: &parking_lot::RwLock<Store>, db: &parking
             res.errors.push(format!("base de données : {e}"));
         }
         let _ = dbg.finish_import(batch, res.sources as i64, res.hands as i64, res.imported as i64, res.duplicates as i64, res.invalid as i64, "ok");
+        // l'import est écrit dans le fichier principal : rien ne dépend plus du journal WAL
+        dbg.checkpoint();
     }
     let mut hands: Vec<(Hand, HandFacts)> = std::mem::take(&mut st.hands).into_iter().map(|r| (r.h, r.f)).collect();
     hands.extend(analyzed);

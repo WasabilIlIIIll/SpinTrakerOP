@@ -92,7 +92,15 @@ export function ImportPage() {
           <>
             <Icon name="upload" size={30} />
             <div className="dz-t">Glissez-déposez vos fichiers, dossiers ou .zip ici</div>
-            <div className="muted small">Formats reconnus : PMU / iPoker (.xml), Winamax (.txt, bêta). Les doublons sont ignorés automatiquement.</div>
+            <div className="formats">
+              <span className="fmt ok">PMU (.xml)</span>
+              <span className="fmt">Winamax (.txt + résumés)</span>
+              <span className="fmt ok">Betclic Spin &amp; Rush (.txt ExportHH, .zip)</span>
+              <span className="fmt">Betclic ancien / iPoker (.xml)</span>
+              <span className="fmt">Unibet (.txt)</span>
+              <span className="fmt">PokerStars Spin &amp; Go (.txt)</span>
+            </div>
+            <div className="muted small">Room détectée automatiquement · doublons ignorés · seuls les formats Spin (2-3 joueurs) sont conservés.</div>
             <div className="row gap8">
               <Btn kind="primary" icon="file" onClick={pickFiles}>
                 Choisir des fichiers
@@ -113,6 +121,7 @@ export function ImportPage() {
             <Res l="Doublons" v={result.duplicates} />
             <Res l="Invalides" v={result.invalid} tone={result.invalid ? "neg" : ""} />
             <Res l="Tournois" v={result.tournaments} />
+            {result.skipped > 0 && <Res l="Hors format Spin" v={result.skipped} tone="warn" />}
           </div>
           {result.errors.length > 0 && (
             <details className="errs">

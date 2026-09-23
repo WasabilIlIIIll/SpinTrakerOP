@@ -121,6 +121,12 @@ fn main() {
             for (k, v) in names.iter().take(15) {
                 println!("  {v:5} × {k}");
             }
+            let incomplete: Vec<_> = s.tours.iter().filter(|t| t.t.hands as usize > t.hands.len()).collect();
+            println!("
+-- tournois incomplets (mains manquantes) : {} --", incomplete.len());
+            for t in incomplete.iter().take(20) {
+                println!("  {} | {} | {}/{} mains | source {}", t.t.code, t.t.name, t.hands.len(), t.t.hands, t.t.source);
+            }
             println!("
 -- 10 tournois aux chips les plus extremes --");
             let mut tt: Vec<_> = s.tours.iter().collect();
@@ -163,6 +169,28 @@ fn main() {
                 }
             }
             println!("mains incohérentes : {bad} / {}", s.hands.len());
+            // continuité des tapis d'une main à la suivante, et chips cohérentes avec la place
+            let (mut breaks, mut wrong_place) = (0, 0);
+            for t in &s.tours {
+                for w in t.hands.windows(2) {
+                    let (a, b) = (&s.hands[w[0]], &s.hands[w[1]]);
+                    let ok = a.h.seats.iter().enumerate().all(|(i, seat)| {
+                        let next = b.h.seats.iter().find(|x| x.name == seat.name).map(|x| x.stack).unwrap_or(0.0);
+                        (a.f.players[i].stack_after - next).abs() < 0.5
+                    });
+                    if !ok {
+                        breaks += 1;
+                        if breaks <= 3 {
+                            println!("rupture de tapis : {} -> {}", a.h.id, b.h.id);
+                        }
+                    }
+                }
+                let won_all = t.chips > 0.0 && (t.chips - t.total_chips + t.t.starting_stack).abs() < 1.0;
+                if (t.place == 1) != won_all && t.t.place > 0 {
+                    wrong_place += 1;
+                }
+            }
+            println!("ruptures de tapis : {breaks} · places incohérentes : {wrong_place}");
         }
         Some("kv") if args.len() > 2 => {
             state.db.lock().kv_set(&args[1], &args[2]).expect("écriture impossible");
