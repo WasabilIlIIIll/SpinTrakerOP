@@ -128,6 +128,16 @@ function BookMenu({ book, update }: { book: RangeBook; update: (b: RangeBook, no
 
 // ---------------------------------------------------------------- vue / éditeur
 
+/** Plus long début de `h` qui existe dans l'arbre de cette profondeur. */
+function validPrefix(fmt: Fmt, depth: number, sizes: TreeSizes, h: string[]): string[] {
+  for (let k = h.length; k > 0; k--) {
+    const r = replay(fmt, depth, sizes, h.slice(0, k));
+    // un coup terminé (fold, tapis payé) n'a pas de range à montrer : on s'arrête avant
+    if (r && !r.states[r.states.length - 1].terminal) return h.slice(0, k);
+  }
+  return [];
+}
+
 const DEPTHS = [25, 22, 20, 18, 16, 14, 12, 10, 8, 6];
 
 function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, now?: boolean) => void }) {
@@ -146,11 +156,13 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
   const sizes: TreeSizes = db?.sizes ?? defaultSizes(fmt);
   const pos = FORMATS[fmt].pos;
 
-  // revenir à la racine quand on change de format / profondeur / arbre
+  // changement de format : les positions changent, on repart du début du coup
   useEffect(() => {
     setHistory([]);
     setCell(null);
-  }, [fmt, depth, JSON.stringify(sizes)]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fmt]);
+  // tailles modifiées : on garde la partie du coup qui existe encore
+  useEffect(() => setHistory((h) => validPrefix(fmt, depth, sizes, h)), [JSON.stringify(sizes)]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const r = replay(fmt, depth, sizes, history) ?? replay(fmt, depth, sizes, [])!;
   const cur = r.states[r.states.length - 1];
@@ -215,7 +227,16 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
     setPaste(null);
   };
 
-  const onDepth = (d: number) => setPrefs({ rangesDepth: d });
+  // changement de profondeur : on reste sur le même coup (ex. BTN Raise 2 · SB Call · BB ?)
+  const onDepth = (d: number) => {
+    const nsizes = findBook(book, fmt, d)?.sizes ?? defaultSizes(fmt);
+    const kept = validPrefix(fmt, d, nsizes, history);
+    if (kept.length < history.length) toast(`Ce coup n'existe pas à ${fmtBB(d)} bb : retour à la dernière décision possible`);
+    setHistory(kept);
+    setPrefs({ rangesDepth: d });
+  };
+  const depthList = depthsOf(fmt);
+  const di = depthList.indexOf(depth);
 
   return (
     <div className="gw">
@@ -231,13 +252,21 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
               </button>
             ))}
           </div>
-          <select className="gw-sel" value={depth} onChange={(e) => onDepth(+e.target.value)} title="Profondeur (tapis symétriques)">
-            {depthsOf(fmt).map((d) => (
-              <option key={d} value={d}>
-                {fmtBB(d)} bb {hasRanges(fmt, d) ? "●" : ""}
-              </option>
-            ))}
-          </select>
+          <div className="gw-depth">
+            <button className="gw-btn" disabled={di <= 0} onClick={() => onDepth(depthList[di - 1])} title="Plus profond (même coup)">
+              ‹
+            </button>
+            <select className="gw-sel" value={depth} onChange={(e) => onDepth(+e.target.value)} title="Profondeur (tapis symétriques) : le coup affiché est conservé">
+              {depthList.map((d) => (
+                <option key={d} value={d}>
+                  {fmtBB(d)} bb {hasRanges(fmt, d) ? "●" : ""}
+                </option>
+              ))}
+            </select>
+            <button className="gw-btn" disabled={di < 0 || di >= depthList.length - 1} onClick={() => onDepth(depthList[di + 1])} title="Moins profond (même coup)">
+              ›
+            </button>
+          </div>
           <button className="gw-btn" onClick={() => setSizesOpen(true)}>
             ⚙ Tailles
           </button>

@@ -927,3 +927,6 @@ button.gw-tile:hover { background: var(--g-tile2); }
 .tr-info { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
 .tr-bet-hero { position: absolute; left: 50%; top: -20px; transform: translateX(-50%); white-space: nowrap; }
 .tr-pot { top: 38%; }
+.gw-depth { display: flex; gap: 3px; align-items: center; }
+.gw-depth .gw-btn { padding: 2px 7px; }
+.gw-depth .gw-btn:disabled { opacity: .35; }
