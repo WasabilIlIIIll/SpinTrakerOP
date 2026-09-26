@@ -234,6 +234,8 @@ export interface DepthBook {
   /** mains qui atteignent chaque spot, quand le fichier importé les donne (sinon calculées
    * à partir des décisions précédentes du joueur) */
   reach?: Record<string, string>;
+  /** stratégies mixtes (fréquences exactes par main) ; sinon une action par main */
+  mixed?: boolean;
   /** fréquences globales de chaque action d'après le fichier importé (0-1) */
   freq?: Record<string, Record<string, number>>;
   /** clé de spot -> action -> range texte */
@@ -418,45 +420,81 @@ export function mapHistory(fmt: Fmt, depth: number, sizes: TreeSizes, h: string[
   return out;
 }
 
-/** Export de ranges « simplifiées » : `{ depths: { "25": { "ROOT": { hero, actions, hand_action } … } } }`,
- * une action par main. Converti en livre : l'arbre du fichier devient l'arbre du livre. */
+/** Export de ranges du solveur, deux variantes :
+ * - « simplifiée » : `{ depths: { "25": { "ROOT": { hero, actions: { F: { freq_pct } }, hand_action: { AA: "R2" } } } } }`,
+ *   une seule action par main ;
+ * - « exacte » : `actions: ["F", "R2", "RAI"]`, `action_frequencies`, et pour chaque main
+ *   `hands: { AA: { freq: { F: 0, R2: 100, RAI: 0 }, reach: 1 } }` (stratégie mixte et poids
+ *   de la main dans la range).
+ * L'arbre du fichier devient l'arbre du livre. */
 export function fromSimpleExport(j: unknown): RangeBook | null {
-  const d = (j as { depths?: Record<string, Record<string, { hero: string; actions: Record<string, unknown>; hand_action?: Record<string, string> }>> })?.depths;
+  type Hand = { freq?: Record<string, number>; reach?: number };
+  type Node = {
+    hero: string;
+    actions: Record<string, unknown> | string[];
+    action_frequencies?: Record<string, number>;
+    hand_action?: Record<string, string>;
+    hands?: Record<string, Hand>;
+  };
+  const d = (j as { depths?: Record<string, Record<string, Node>> })?.depths;
   if (!d || typeof d !== "object") return null;
-  const meta = j as { source?: string; note?: string };
+  const meta = j as { source?: string; note?: string; format?: string };
   const norm = (id: string) => (id === "RAI" ? "AI" : id);
   const keyOf = (k: string) => (k === "ROOT" ? "" : k.split("-").map(norm).join("-"));
+  const r4 = (x: number) => Math.round(x * 10000) / 10000;
   const books: DepthBook[] = [];
   for (const [ds, nodes] of Object.entries(d)) {
     const depth = parseFloat(ds);
     if (!(depth > 0)) continue;
     const fmt: Fmt = Object.values(nodes).some((n) => n.hero === "BTN") ? "spin3" : "hu";
     const explicit: Record<string, string[]> = {};
-    for (const [k, n] of Object.entries(nodes)) explicit[keyOf(k)] = Object.keys(n.actions ?? {}).map(norm);
+    for (const [k, n] of Object.entries(nodes)) explicit[keyOf(k)] = (Array.isArray(n.actions) ? n.actions : Object.keys(n.actions ?? {})).map(norm);
     const out: Record<string, Record<string, string>> = {};
     const reach: Record<string, string> = {};
     const freq: Record<string, Record<string, number>> = {};
+    let mixed = false;
     for (const [k, n] of Object.entries(nodes)) {
       const key = keyOf(k);
-      reach[key] = Object.keys(n.hand_action ?? {}).join(",");
-      freq[key] = Object.fromEntries(
-        Object.entries(n.actions ?? {}).map(([id, a]) => [norm(id), Math.max(0, Number((a as { freq_pct?: number }).freq_pct ?? 0)) / 100]),
-      );
       const acts = explicit[key];
       // action implicite (reste) : fold, sinon check / call
       const imp = acts.includes("F") ? "F" : acts.find((a) => a === "X" || a === "C") ?? acts[0];
-      const lists: Record<string, string[]> = {};
-      for (const [hand, a] of Object.entries(n.hand_action ?? {})) {
-        const id = norm(a);
-        if (id !== imp) (lists[id] ??= []).push(hand);
+      if (n.action_frequencies) freq[key] = Object.fromEntries(Object.entries(n.action_frequencies).map(([id, f]) => [norm(id), Math.max(0, Number(f) || 0) / 100]));
+      else if (!Array.isArray(n.actions))
+        freq[key] = Object.fromEntries(Object.entries(n.actions ?? {}).map(([id, a]) => [norm(id), Math.max(0, Number((a as { freq_pct?: number }).freq_pct ?? 0)) / 100]));
+      if (n.hands && Object.keys(n.hands).length) {
+        // fréquences exactes par main ; poids dans la range (une main listée mais arrondie à 0
+        // dans le fichier garde un poids minimal pour rester visible)
+        mixed = true;
+        const lists: Record<string, string[]> = {};
+        const rch: string[] = [];
+        for (const [hand, h] of Object.entries(n.hands)) {
+          rch.push(`${hand}:${Math.max(0.0015, r4(Math.min(1, h.reach ?? 1)))}`);
+          // pourcentages arrondis à l'entier dans le fichier (total 99 à 101) : ramenés à 100 %
+          const sum = Object.values(h.freq ?? {}).reduce((x, f) => x + (Number(f) || 0), 0) || 100;
+          for (const [id0, f] of Object.entries(h.freq ?? {})) {
+            const id = norm(id0);
+            const w = r4((Number(f) || 0) / sum);
+            if (id !== imp && w > 0) (lists[id] ??= []).push(w >= 0.9999 ? hand : `${hand}:${w}`);
+          }
+        }
+        reach[key] = rch.join(",");
+        out[key] = Object.fromEntries(Object.entries(lists).map(([id, hs]) => [id, hs.join(",")]));
+      } else {
+        reach[key] = Object.keys(n.hand_action ?? {}).join(",");
+        const lists: Record<string, string[]> = {};
+        for (const [hand, a] of Object.entries(n.hand_action ?? {})) {
+          const id = norm(a);
+          if (id !== imp) (lists[id] ??= []).push(hand);
+        }
+        out[key] = Object.fromEntries(Object.entries(lists).map(([id, hs]) => [id, hs.join(",")]));
       }
-      out[key] = Object.fromEntries(Object.entries(lists).map(([id, hs]) => [id, hs.join(",")]));
     }
     books.push({
       fmt,
       depth,
       sizes: { ...defaultSizes(fmt), explicit },
-      source: [meta.source?.trim().replace(/^-\s*/, ""), meta.note].filter(Boolean).join(" · "),
+      source: [meta.source?.trim().replace(/^-\s*/, ""), mixed ? "fréquences exactes par main" : meta.note].filter(Boolean).join(" · "),
+      mixed,
       nodes: out,
       reach,
       freq,

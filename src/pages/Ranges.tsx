@@ -618,7 +618,9 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
         </div>
       )}
       <div className="gw-src">
-        {db?.source ? `Ranges importées : ${db.source} (grille : action dominante de chaque main ; pourcentages : fréquences du solveur)` : "Ranges personnelles"} · {FORMATS[fmt].label} · tapis {fmtBB(depth)} bb symétriques ·{" "}
+        {db?.source
+          ? `Ranges importées : ${db.source} (${db.mixed ? "grille : fréquences exactes et poids de chaque main" : "grille : action dominante de chaque main"} ; pourcentages : fréquences du solveur)`
+          : "Ranges personnelles"} · {FORMATS[fmt].label} · tapis {fmtBB(depth)} bb symétriques ·{" "}
         {sizes.explicit
           ? `arbre du fichier (${Object.keys(sizes.explicit).length} spots, tailles propres à chaque spot)`
           : `open ${Object.entries(sizes.open).map(([p, v]) => `${p} ${fmtBB(v)}`).join(", ")} · 3-bet ${fmtBB(sizes.threeBet)}× · au-delà de ${sizes.maxRaises} relances ou ${num(sizes.maxRaiseFrac * 100, 0)} % du tapis : tapis seulement`}
