@@ -451,21 +451,33 @@ function actionFor(acts: Act[], what: KeyAction): number {
 
 // ---------------------------------------------------------------- session
 
-/** Proportions d'une table : feutre (hauteur / largeur) et bandeau + boutons. */
-const FELT_RATIO = 0.56;
-const TABLE_CHROME = 0.2;
+/** Limites d'allongement du feutre (largeur / hauteur) : en deçà ou au-delà la table
+ * paraîtrait écrasée ou étirée ; entre les deux, elle remplit toute sa case. */
+const FELT_MIN = 1.45;
+const FELT_MAX = 2.5;
 
-/** Nombre de colonnes et largeur de table pour que toutes les tables tiennent à l'écran. */
-function fit(n: number, W: number, H: number, gap = 10): { cols: number; w: number } {
-  let best = { cols: 1, w: 0 };
+/** Taille de police d'une table (tout le décor est en em) et hauteur du bandeau + boutons. */
+const fontFor = (w: number, h: number) => Math.max(6, Math.min(20, Math.min(w / 42, h / 21)));
+const chromeFor = (fs: number) => fs * 4.3 + 22;
+
+/** Découpage de la zone en cases pour `n` tables : on garde celui qui laisse les plus
+ * grandes tables, chaque table remplissant sa case dans les limites d'allongement. */
+function fit(n: number, W: number, H: number, gap = 10): { cols: number; w: number; h: number } {
+  let best = { cols: 1, w: 0, h: 0, area: 0 };
   for (let cols = 1; cols <= n; cols++) {
     const rows = Math.ceil(n / cols);
-    const byW = (W - (cols - 1) * gap) / cols;
-    const byH = (H - (rows - 1) * gap) / rows / (FELT_RATIO + TABLE_CHROME);
-    const w = Math.min(byW, byH, 900);
-    if (w > best.w + 1) best = { cols, w };
+    const cw = (W - (cols - 1) * gap) / cols;
+    const ch = (H - (rows - 1) * gap) / rows;
+    const chrome = chromeFor(fontFor(cw, ch));
+    let w = cw;
+    let felt = ch - chrome;
+    if (felt <= 40) continue;
+    if (w / felt > FELT_MAX) w = felt * FELT_MAX;
+    if (w / felt < FELT_MIN) felt = w / FELT_MIN;
+    const area = w * (felt + chrome);
+    if (area > best.area * 1.01) best = { cols, w, h: felt + chrome, area };
   }
-  return best;
+  return { cols: best.cols, w: Math.floor(best.w), h: Math.floor(best.h) };
 }
 
 function Session({
@@ -512,7 +524,7 @@ function Session({
       window.removeEventListener("resize", measure);
     };
   }, []);
-  const { cols, w } = fit(cfg.tables, box.w, box.h);
+  const { cols, w, h } = fit(cfg.tables, box.w, box.h);
 
   useEffect(
     () => () => {
@@ -644,13 +656,13 @@ function Session({
         </Btn>
       </div>
       <div ref={area} className="tr-area" style={{ height: box.h }}>
-        <div className="tr-tables" style={{ gridTemplateColumns: `repeat(${cols}, ${Math.floor(w)}px)` }}>
+        <div className="tr-tables" style={{ gridTemplateColumns: `repeat(${cols}, ${w}px)` }}>
           {deals.map((d, t) => (
             <div key={t} data-table={t} onMouseEnter={() => (hovered.current = t)}>
               {d ? (
-                <Table deal={d} cfg={cfg} width={Math.floor(w)} onAnswer={(i) => answer(t, i)} onNext={() => next(t)} />
+                <Table deal={d} cfg={cfg} width={w} height={h} onAnswer={(i) => answer(t, i)} onNext={() => next(t)} />
               ) : (
-                <div className="tt tt-empty" style={{ width: w, height: w * (FELT_RATIO + TABLE_CHROME) }}>
+                <div className="pk pk-empty" style={{ width: w, height: h }}>
                   Aucune main disponible
                 </div>
               )}
@@ -664,7 +676,46 @@ function Session({
 
 // ---------------------------------------------------------------- table
 
-/** Jetons empilés pour un montant en bb (25, 5, 1 et ½ bb), montant écrit dessous. */
+/** Couleurs des jetons : corps, bord (face latérale) et inserts du pourtour. */
+const CHIP: Record<string, { body: string; side: string; ins: string; core: string }> = {
+  c05: { body: "#f1f4f8", side: "#c3cad4", ins: "#2f6fd6", core: "#dfe6ef" },
+  c1: { body: "#d6322b", side: "#9c1d18", ins: "#ffffff", core: "#bf2923" },
+  c5: { body: "#1f9a54", side: "#12693a", ins: "#ffffff", core: "#18864a" },
+  c25: { body: "#24272e", side: "#101216", ins: "#f2c94c", core: "#30343d" },
+};
+
+/** Pile de jetons vue de trois quarts : chaque jeton a sa tranche (épaisseur) et le dessus
+ * avec les inserts du pourtour, l'anneau central et un reflet. */
+function ChipPile({ kinds }: { kinds: string[] }) {
+  const rx = 18;
+  const ry = 8.2;
+  const t = 5.6; // épaisseur d'un jeton
+  const n = kinds.length;
+  const H = ry * 2 + t + (n - 1) * t + 1;
+  const cx = 20;
+  return (
+    <svg className="pk-pile" viewBox={`0 0 40 ${H}`} style={{ height: `${(H / 40) * 2.7}em` }}>
+      {kinds.map((k, i) => {
+        const c = CHIP[k];
+        const cy = H - ry - t - 0.5 - i * t; // centre du dessus du jeton i (0 = en bas)
+        const side = `M${cx - rx},${cy} A${rx},${ry} 0 0 0 ${cx + rx},${cy} L${cx + rx},${cy + t} A${rx},${ry} 0 0 1 ${cx - rx},${cy + t} Z`;
+        const edge = `M${cx - rx},${cy + t / 2} A${rx},${ry} 0 0 0 ${cx + rx},${cy + t / 2}`;
+        return (
+          <g key={i}>
+            <path d={side} fill={c.side} />
+            <path d={edge} fill="none" stroke={c.ins} strokeWidth={t * 0.62} strokeDasharray="4.2 5.6" opacity={0.9} />
+            <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill={c.body} />
+            <ellipse cx={cx} cy={cy} rx={rx - 2.1} ry={ry - 1} fill="none" stroke={c.ins} strokeWidth={2.4} strokeDasharray="4.6 5.2" />
+            <ellipse cx={cx} cy={cy} rx={rx * 0.58} ry={ry * 0.58} fill={c.core} stroke={c.ins} strokeWidth={0.7} strokeDasharray="1.4 1.3" />
+            <ellipse cx={cx - 4} cy={cy - 2.4} rx={rx * 0.5} ry={ry * 0.32} fill="#fff" opacity={0.13} />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+/** Mise en jetons (25, 5, 1 et ½ bb), une pile par valeur, montant écrit dessous. */
 function Chips({ bb, className }: { bb: number; className?: string }) {
   const den: [number, string][] = [
     [25, "c25"],
@@ -673,24 +724,20 @@ function Chips({ bb, className }: { bb: number; className?: string }) {
     [0.5, "c05"],
   ];
   let rest = Math.round(bb * 2) / 2;
-  const stacks: string[][] = [];
+  const piles: string[][] = [];
   for (const [v, c] of den) {
     const k = Math.floor(rest / v + 1e-9);
     rest -= k * v;
-    if (k > 0) stacks.push(Array(Math.min(k, 8)).fill(c));
+    if (k > 0) piles.push(Array(Math.min(k, 10)).fill(c));
   }
   return (
-    <div className={cls("tt-chips", className)}>
-      <div className="tt-stacks">
-        {stacks.map((st, i) => (
-          <div key={i} className="tt-stack" style={{ height: `${0.95 + (st.length - 1) * 0.32}em` }}>
-            {st.map((c, k) => (
-              <i key={k} className={cls("tt-chip", c)} style={{ bottom: `${k * 0.32}em` }} />
-            ))}
-          </div>
+    <div className={cls("pk-chips", className)}>
+      <div className="pk-piles">
+        {piles.map((p, i) => (
+          <ChipPile key={i} kinds={p} />
         ))}
       </div>
-      <span className="tt-amt">{fmtBB(bb)} bb</span>
+      <span className="pk-amt">{fmtBB(bb)} bb</span>
     </div>
   );
 }
@@ -698,9 +745,9 @@ function Chips({ bb, className }: { bb: number; className?: string }) {
 const SUIT: Record<string, string> = { s: "♠", h: "♥", d: "♦", c: "♣" };
 
 function TCard({ card }: { card?: string }) {
-  if (!card) return <span className="tt-card back" />;
+  if (!card) return <span className="pk-card back" />;
   return (
-    <span className={cls("tt-card", `s-${card[1]}`)}>
+    <span className={cls("pk-card", `s-${card[1]}`)}>
       <b>{card[0] === "T" ? "10" : card[0]}</b>
       <i>{SUIT[card[1]]}</i>
     </span>
@@ -709,16 +756,19 @@ function TCard({ card }: { card?: string }) {
 
 // positions relatives au héros (en bas) : siège, mise et bouton dealer, en % du feutre
 const LAYOUT3 = [
-  { seat: [50, 83], bet: [50, 60], btn: [64, 62] },
+  { seat: [50, 85], bet: [50, 55], btn: [63, 60] },
   { seat: [13, 30], bet: [30, 45], btn: [22, 47] },
   { seat: [87, 30], bet: [70, 45], btn: [78, 47] },
 ];
 const LAYOUT2 = [
-  { seat: [50, 83], bet: [50, 60], btn: [64, 62] },
-  { seat: [50, 17], bet: [50, 36], btn: [64, 34] },
+  { seat: [50, 85], bet: [50, 58], btn: [63, 62] },
+  { seat: [50, 17], bet: [50, 34], btn: [63, 30] },
 ];
+/** position du pot (au-dessus de la mise du héros, sous les adversaires) */
+const POT3 = [50, 37];
+const POT2 = [50, 46];
 
-function Table({ deal, cfg, width, onAnswer, onNext }: { deal: Deal; cfg: Cfg; width: number; onAnswer: (i: number) => void; onNext: () => void }) {
+function Table({ deal, cfg, width, height, onAnswer, onNext }: { deal: Deal; cfg: Cfg; width: number; height: number; onAnswer: (i: number) => void; onNext: () => void }) {
   const { ps, cards, cell, result } = deal;
   const sp = ps.spot;
   const fmt = sp.state.fmt;
@@ -738,18 +788,18 @@ function Table({ deal, cfg, width, onAnswer, onNext }: { deal: Deal; cfg: Cfg; w
   const dealer = pos.indexOf(n === 3 ? "BTN" : "SB");
   const at = (xy: number[]) => ({ left: `${xy[0]}%`, top: `${xy[1]}%` });
   // tout le décor est en em : il suit la taille de la table
-  const fs = Math.max(5, Math.min(18, width / 40));
+  const fs = fontFor(width, height);
   return (
-    <div className={cls("tt", result && (result.ok ? "ok" : "ko"))} style={{ width, fontSize: fs }}>
-      <div className="tt-spot">{ps.label}</div>
-      <div className="tt-felt" style={{ height: width * FELT_RATIO }}>
-        <div className="tt-rail">
-          <div className="tt-cloth">
-            <img className="tt-logo" src="/logo.png" alt="" />
+    <div className={cls("pk", result && (result.ok ? "ok" : "ko"))} style={{ width, height, fontSize: fs }}>
+      <div className="pk-spot">{ps.label}</div>
+      <div className="pk-felt">
+        <div className="pk-rail">
+          <div className="pk-cloth">
+            <img className="pk-logo" src="/logo.png" alt="" />
           </div>
         </div>
-        <div className="tt-pot" style={at([50, 38])}>
-          <span className="tt-pot-l">Pot {fmtBB(pot)} bb</span>
+        <div className="pk-pot" style={at(n === 3 ? POT3 : POT2)}>
+          <span className="pk-pot-l">Pot {fmtBB(pot)} bb</span>
         </div>
         {pos.map((p, i) => {
           const rel = (i - hero + n) % n;
@@ -760,50 +810,50 @@ function Table({ deal, cfg, width, onAnswer, onNext }: { deal: Deal; cfg: Cfg; w
           return (
             <div key={p}>
               {put > 0 && (
-                <div className={cls("tt-at", folded && "gone")} style={at(L.bet)}>
+                <div className={cls("pk-at", folded && "gone")} style={at(L.bet)}>
                   <Chips bb={put} />
                 </div>
               )}
               {i === dealer && (
-                <div className="tt-at" style={at(L.btn)}>
-                  <span className="tt-dealer">D</span>
+                <div className="pk-at" style={at(L.btn)}>
+                  <span className="pk-dealer">D</span>
                 </div>
               )}
-              <div className={cls("tt-seat", me && "me", folded && "folded")} style={at(L.seat)}>
+              <div className={cls("pk-seat", me && "me", folded && "folded")} style={at(L.seat)}>
                 {me ? (
-                  <div className="tt-hand">
+                  <div className="pk-hand">
                     <TCard card={cards[0]} />
                     <TCard card={cards[1]} />
                   </div>
                 ) : (
                   !folded && (
-                    <div className="tt-hand small">
+                    <div className="pk-hand small">
                       <TCard />
                       <TCard />
                     </div>
                   )
                 )}
-                <div className="tt-plate">
+                <div className="pk-plate">
                   <b>{p}</b>
                   <span>{fmtBB(ps.depth - put)} bb</span>
                 </div>
-                {!me && lastAct[i] && <div className={cls("tt-act", folded ? "fold" : /allin/i.test(lastAct[i]!) ? "ai" : /raise/i.test(lastAct[i]!) ? "raise" : "call")}>{lastAct[i]}</div>}
+                {!me && lastAct[i] && <div className={cls("pk-act", folded ? "fold" : /allin/i.test(lastAct[i]!) ? "ai" : /raise/i.test(lastAct[i]!) ? "raise" : "call")}>{lastAct[i]}</div>}
               </div>
             </div>
           );
         })}
         {result?.ok && (
-          <div className="tt-flash">
+          <div className="pk-flash">
             ✓ {sp.acts[result.choice].label}
             {result.freq < result.best - 1e-9 && <small> (mixte {num(result.freq * 100, 0)} %)</small>}
           </div>
         )}
       </div>
-      <div className="tt-actions">
+      <div className="pk-actions">
         {sp.acts.map((a, i) => (
           <button
             key={a.id}
-            className={cls("tt-btn", result && result.choice === i && (result.ok ? "good" : "bad"))}
+            className={cls("pk-btn", result && result.choice === i && (result.ok ? "good" : "bad"))}
             style={{ background: colors[i] }}
             disabled={!!result}
             onClick={() => onAnswer(i)}
@@ -815,11 +865,11 @@ function Table({ deal, cfg, width, onAnswer, onNext }: { deal: Deal; cfg: Cfg; w
         ))}
       </div>
       {result && !result.ok && (
-        <div className="tt-review">
-          <div className="tt-review-h">
+        <div className="pk-review">
+          <div className="pk-review-h">
             <b>{cellName(cell)}</b> · tu as joué <span className="neg">{sp.acts[result.choice].label}</span> ({num(result.freq * 100, 0)} %)
           </div>
-          <div className="tt-review-s">
+          <div className="pk-review-s">
             {sp.acts.map((a, i) =>
               ps.strat[cell][i] > 0.004 ? (
                 <span key={a.id}>
@@ -829,7 +879,7 @@ function Table({ deal, cfg, width, onAnswer, onNext }: { deal: Deal; cfg: Cfg; w
               ) : null,
             )}
           </div>
-          <div className="gw tt-grid">
+          <div className="gw pk-grid">
             <HandGrid
               highlight={new Set([cell])}
               dim={(c) => ps.reach[c] <= 0.001}
@@ -847,7 +897,7 @@ function Table({ deal, cfg, width, onAnswer, onNext }: { deal: Deal; cfg: Cfg; w
               Main suivante (Espace)
             </button>
           ) : (
-            <div className="tt-timer" style={{ animationDuration: `${cfg.showMs}ms` }} />
+            <div className="pk-timer" style={{ animationDuration: `${cfg.showMs}ms` }} />
           )}
         </div>
       )}
