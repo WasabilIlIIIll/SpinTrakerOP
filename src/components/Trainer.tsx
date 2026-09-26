@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "../lib/state";
 import { Btn, Help, Panel } from "./ui";
 import { HandGrid } from "./HandGrid";
-import { PlayingCard } from "./PlayingCard";
 import { cls, num } from "../lib/format";
 import {
   FORMATS,
@@ -25,6 +24,7 @@ import {
   strategy,
   type Fmt,
   type RangeBook,
+  type Act,
   type DepthBook,
   type Spot,
   type TreeSizes,
@@ -44,6 +44,8 @@ interface Cfg {
   fewerTrivial: boolean;
   /** tirage des spots selon la fréquence réelle du coup (sinon uniforme) */
   realistic: boolean;
+  /** raccourcis (touche ou bouton de souris par action) */
+  keys?: Partial<KeyMap>;
 }
 
 const DEFAULT_CFG: Cfg = { fmt: "spin3", depths: [], tables: 1, positions: [], off: [], threshold: 0.1, showMs: 5000, waitClick: false, fewerTrivial: true, realistic: true };
@@ -271,15 +273,18 @@ export function Trainer({ book }: { book: RangeBook }) {
               </button>
             </div>
           </Row>
+          <Row label="Raccourcis" help="Comme dans Jurojin : clique une case puis appuie sur la touche ou le bouton de souris voulu (Échap = aucun). Ils agissent sur la table sous la souris. Les touches 1 à 9 choisissent aussi l'action dans l'ordre des boutons.">
+            <KeyEditor keys={{ ...DEFAULT_KEYS, ...(cfg.keys ?? {}) }} onChange={(k) => setCfg({ keys: k })} />
+          </Row>
           <label className="row gap8 small">
             <input type="checkbox" checked={cfg.fewerTrivial} onChange={(e) => setCfg({ fewerTrivial: e.target.checked })} />
             Moins de mains évidentes (folds purs 5 fois moins souvent)
           </label>
-          <div className="row gap12">
+          <div className="row gap12 tr-go">
             <Btn kind="primary" icon="play" disabled={!pool.length} onClick={() => setRunning(true)}>
               Lancer ({pool.length} spot{pool.length > 1 ? "s" : ""})
             </Btn>
-            <span className="muted small">Raccourcis : 1-5 ou F / C / R / A sur la table survolée, Espace pour passer.</span>
+            <span className="muted small">Les raccourcis agissent sur la table sous la souris · touches 1 à 9 = boutons dans l'ordre · Espace = main suivante après une erreur.</span>
           </div>
           {last && last.n > 0 && (
             <div className="tr-last">
@@ -340,6 +345,60 @@ export function Trainer({ book }: { book: RangeBook }) {
   );
 }
 
+function KeyEditor({ keys, onChange }: { keys: KeyMap; onChange: (k: KeyMap) => void }) {
+  const [wait, setWait] = useState<KeyAction | null>(null);
+  useEffect(() => {
+    if (!wait) return;
+    const set = (code: string) => {
+      // une touche ne sert qu'à une action
+      const next = { ...keys };
+      for (const k of Object.keys(next) as KeyAction[]) if (next[k] === code) next[k] = "";
+      next[wait] = code;
+      onChange(next);
+      setWait(null);
+    };
+    const key = (e: KeyboardEvent) => {
+      e.preventDefault();
+      if (e.code === "Escape") {
+        onChange({ ...keys, [wait]: "" });
+        setWait(null);
+      } else set(e.code);
+    };
+    const mouse = (e: MouseEvent) => {
+      if (e.button === 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      set(`Mouse${e.button}`);
+    };
+    const block = (e: Event) => e.preventDefault();
+    window.addEventListener("keydown", key, true);
+    window.addEventListener("mouseup", mouse, true);
+    window.addEventListener("contextmenu", block, true);
+    window.addEventListener("auxclick", block, true);
+    return () => {
+      window.removeEventListener("keydown", key, true);
+      window.removeEventListener("mouseup", mouse, true);
+      window.removeEventListener("contextmenu", block, true);
+      window.removeEventListener("auxclick", block, true);
+    };
+  }, [wait, keys]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div className="tr-keyed">
+      {(Object.keys(KEY_LABELS) as KeyAction[]).map((k) => (
+        <div key={k} className="tr-keyrow">
+          <span className={cls("tr-keylbl", k)}>{KEY_LABELS[k]}</span>
+          <button className={cls("tr-keybox", wait === k && "wait")} onMouseDown={(e) => e.button === 0 && setWait(wait === k ? null : k)}>
+            {wait === k ? "Appuie…" : keyName(keys[k])}
+          </button>
+        </div>
+      ))}
+      <button className="fchip" onClick={() => onChange(DEFAULT_KEYS)}>
+        Réglage Jurojin
+      </button>
+    </div>
+  );
+}
+
 function Row({ label, help, children }: { label: string; help?: string; children: React.ReactNode }) {
   return (
     <div className="tr-row">
@@ -351,7 +410,63 @@ function Row({ label, help, children }: { label: string; help?: string; children
   );
 }
 
+// ---------------------------------------------------------------- raccourcis
+
+/** Raccourcis façon Jurojin : une touche (code clavier) ou un bouton de souris par action. */
+export type KeyAction = "fold" | "call" | "raise" | "allin";
+export type KeyMap = Record<KeyAction, string>;
+
+/** Réglage de Laszlo dans Jurojin : clic droit = se coucher/vérifier, XButton1 = tapis,
+ * XButton2 = miser/relancer, pas de raccourci pour payer. */
+export const DEFAULT_KEYS: KeyMap = { fold: "Mouse2", call: "", raise: "Mouse4", allin: "Mouse3" };
+
+export const KEY_LABELS: Record<KeyAction, string> = { fold: "Se coucher / Vérifier", call: "Payer", raise: "Miser / Relancer", allin: "All-in" };
+
+export function keyName(k: string): string {
+  if (!k) return "Aucun";
+  const mouse: Record<string, string> = { Mouse1: "Clic molette", Mouse2: "Clic droit", Mouse3: "XButton1", Mouse4: "XButton2" };
+  if (mouse[k]) return mouse[k];
+  if (k.startsWith("Key")) return k.slice(3);
+  if (k.startsWith("Digit")) return k.slice(5);
+  if (k.startsWith("Numpad")) return `Pavé ${k.slice(6)}`;
+  const named: Record<string, string> = { Space: "Espace", Enter: "Entrée", ShiftLeft: "Maj", ShiftRight: "Maj droite", ControlLeft: "Ctrl", AltLeft: "Alt", Tab: "Tab" };
+  return named[k] ?? k;
+}
+
+/** Action du spot déclenchée par un raccourci (comme sur une table : se coucher devient
+ * vérifier quand on peut checker, relancer devient tapis quand seul le tapis reste). */
+function actionFor(acts: Act[], what: KeyAction): number {
+  const find = (...kinds: string[]) => {
+    for (const k of kinds) {
+      const i = acts.findIndex((a) => a.kind === k);
+      if (i >= 0) return i;
+    }
+    return -1;
+  };
+  if (what === "fold") return find("fold", "check");
+  if (what === "call") return find("call", "check");
+  if (what === "raise") return find("raise", "allin");
+  return find("allin");
+}
+
 // ---------------------------------------------------------------- session
+
+/** Proportions d'une table : feutre (hauteur / largeur) et bandeau + boutons. */
+const FELT_RATIO = 0.56;
+const TABLE_CHROME = 0.2;
+
+/** Nombre de colonnes et largeur de table pour que toutes les tables tiennent à l'écran. */
+function fit(n: number, W: number, H: number, gap = 10): { cols: number; w: number } {
+  let best = { cols: 1, w: 0 };
+  for (let cols = 1; cols <= n; cols++) {
+    const rows = Math.ceil(n / cols);
+    const byW = (W - (cols - 1) * gap) / cols;
+    const byH = (H - (rows - 1) * gap) / rows / (FELT_RATIO + TABLE_CHROME);
+    const w = Math.min(byW, byH, 900);
+    if (w > best.w + 1) best = { cols, w };
+  }
+  return best;
+}
 
 function Session({
   pool,
@@ -374,6 +489,30 @@ function Session({
   const hovered = useRef(0);
   const dealsRef = useRef(deals);
   dealsRef.current = deals;
+  const keys: KeyMap = { ...DEFAULT_KEYS, ...(cfg.keys ?? {}) };
+  const keysRef = useRef(keys);
+  keysRef.current = keys;
+
+  // toutes les tables à l'écran, sans défilement
+  const area = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 800, h: 600 });
+  useEffect(() => {
+    const measure = () => {
+      const el = area.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setBox({ w: r.width, h: Math.max(200, window.innerHeight - r.top - 14) });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (area.current) ro.observe(area.current);
+    window.addEventListener("resize", measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
+  const { cols, w } = fit(cfg.tables, box.w, box.h);
 
   useEffect(
     () => () => {
@@ -388,7 +527,7 @@ function Session({
 
   const answer = (t: number, choice: number) => {
     const d = dealsRef.current[t];
-    if (!d || d.result) return;
+    if (!d || d.result || choice < 0) return;
     const row = d.ps.strat[d.cell];
     const best = Math.max(...row);
     const freq = row[choice];
@@ -415,12 +554,27 @@ function Session({
     else if (!cfg.waitClick) timers.current.push(window.setTimeout(() => next(t), cfg.showMs));
   };
 
+  /** Raccourci reçu (touche ou bouton de souris) sur la table `t`. */
+  const shortcut = (t: number, code: string): boolean => {
+    const d = dealsRef.current[t];
+    if (!d) return false;
+    const what = (Object.keys(keysRef.current) as KeyAction[]).find((k) => keysRef.current[k] === code);
+    if (!what) return false;
+    if (d.result) {
+      if (!d.result.ok && cfg.waitClick) next(t);
+      return true;
+    }
+    answer(t, actionFor(d.ps.spot.acts, what));
+    return true;
+  };
+
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       const t = dealsRef.current.length === 1 ? 0 : hovered.current;
       const d = dealsRef.current[t];
       if (!d) return;
+      if (shortcut(t, e.code)) return e.preventDefault();
       if (e.key === " " || e.key === "Enter") {
         if (d.result) {
           e.preventDefault();
@@ -428,25 +582,39 @@ function Session({
         }
         return;
       }
-      const acts = d.ps.spot.acts;
-      let i = -1;
-      if (e.key >= "1" && e.key <= "9") i = +e.key - 1;
-      else {
-        const kind = { f: "fold", c: "call", x: "check", r: "raise", a: "allin" }[e.key.toLowerCase()];
-        if (kind) i = acts.findIndex((a) => a.kind === kind || (kind === "call" && a.kind === "check"));
-      }
-      if (i >= 0 && i < acts.length) {
+      if (e.key >= "1" && e.key <= "9" && +e.key <= d.ps.spot.acts.length) {
         e.preventDefault();
-        answer(t, i);
+        answer(t, +e.key - 1);
       }
     };
+    // boutons de souris : clic droit, molette, XButton1 / XButton2 (sans retour arrière du navigateur)
+    const mouse = (e: MouseEvent) => {
+      if (e.button === 0) return;
+      const el = (e.target as HTMLElement | null)?.closest?.("[data-table]");
+      if (!el) return;
+      e.preventDefault();
+      if (e.type === "mouseup") shortcut(+el.getAttribute("data-table")!, `Mouse${e.button}`);
+    };
+    const block = (e: MouseEvent) => {
+      if ((e.target as HTMLElement | null)?.closest?.("[data-table]")) e.preventDefault();
+    };
     window.addEventListener("keydown", k);
-    return () => window.removeEventListener("keydown", k);
+    window.addEventListener("mousedown", mouse, true);
+    window.addEventListener("mouseup", mouse, true);
+    window.addEventListener("auxclick", block, true);
+    window.addEventListener("contextmenu", block, true);
+    return () => {
+      window.removeEventListener("keydown", k);
+      window.removeEventListener("mousedown", mouse, true);
+      window.removeEventListener("mouseup", mouse, true);
+      window.removeEventListener("auxclick", block, true);
+      window.removeEventListener("contextmenu", block, true);
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const cols = cfg.tables <= 1 ? 1 : cfg.tables <= 4 ? 2 : 3;
+  const pct = score.n ? score.ok / score.n : 0;
   return (
-    <div className="col gap12">
+    <div className="col gap8">
       <div className="tr-head">
         <div className="tr-kpi">
           <span>Mains</span>
@@ -454,24 +622,41 @@ function Session({
         </div>
         <div className="tr-kpi">
           <span>Justes</span>
-          <b className={score.n && score.ok / score.n >= 0.8 ? "pos" : score.n ? "neg" : ""}>{score.n ? `${num((score.ok / score.n) * 100, 0)} %` : "–"}</b>
+          <b className={score.n ? (pct >= 0.8 ? "pos" : "neg") : ""}>{score.n ? `${num(pct * 100, 0)} %` : "–"}</b>
         </div>
         <div className="tr-kpi">
           <span>Série</span>
           <b>{score.streak}</b>
           <small>record {score.best}</small>
         </div>
+        <div className="tr-keys">
+          {(Object.keys(KEY_LABELS) as KeyAction[])
+            .filter((k) => keys[k])
+            .map((k) => (
+              <span key={k}>
+                <kbd>{keyName(keys[k])}</kbd> {KEY_LABELS[k]}
+              </span>
+            ))}
+        </div>
         <div className="grow" />
         <Btn icon="x" onClick={() => onStop({ n: score.n, ok: score.ok })}>
           Terminer
         </Btn>
       </div>
-      <div className={cls("tr-tables", `c${cols}`)}>
-        {deals.map((d, t) => (
-          <div key={t} onMouseEnter={() => (hovered.current = t)}>
-            {d ? <Table deal={d} cfg={cfg} compact={cfg.tables > 2} onAnswer={(i) => answer(t, i)} onNext={() => next(t)} /> : <div className="tr-table tr-empty">Aucune main disponible</div>}
-          </div>
-        ))}
+      <div ref={area} className="tr-area" style={{ height: box.h }}>
+        <div className="tr-tables" style={{ gridTemplateColumns: `repeat(${cols}, ${Math.floor(w)}px)` }}>
+          {deals.map((d, t) => (
+            <div key={t} data-table={t} onMouseEnter={() => (hovered.current = t)}>
+              {d ? (
+                <Table deal={d} cfg={cfg} width={Math.floor(w)} onAnswer={(i) => answer(t, i)} onNext={() => next(t)} />
+              ) : (
+                <div className="tt tt-empty" style={{ width: w, height: w * (FELT_RATIO + TABLE_CHROME) }}>
+                  Aucune main disponible
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -479,10 +664,61 @@ function Session({
 
 // ---------------------------------------------------------------- table
 
-const SEATS3 = ["s-hero", "s-left", "s-right"];
-const SEATS2 = ["s-hero", "s-top"];
+/** Jetons empilés pour un montant en bb (25, 5, 1 et ½ bb), montant écrit dessous. */
+function Chips({ bb, className }: { bb: number; className?: string }) {
+  const den: [number, string][] = [
+    [25, "c25"],
+    [5, "c5"],
+    [1, "c1"],
+    [0.5, "c05"],
+  ];
+  let rest = Math.round(bb * 2) / 2;
+  const stacks: string[][] = [];
+  for (const [v, c] of den) {
+    const k = Math.floor(rest / v + 1e-9);
+    rest -= k * v;
+    if (k > 0) stacks.push(Array(Math.min(k, 8)).fill(c));
+  }
+  return (
+    <div className={cls("tt-chips", className)}>
+      <div className="tt-stacks">
+        {stacks.map((st, i) => (
+          <div key={i} className="tt-stack" style={{ height: `${0.95 + (st.length - 1) * 0.32}em` }}>
+            {st.map((c, k) => (
+              <i key={k} className={cls("tt-chip", c)} style={{ bottom: `${k * 0.32}em` }} />
+            ))}
+          </div>
+        ))}
+      </div>
+      <span className="tt-amt">{fmtBB(bb)} bb</span>
+    </div>
+  );
+}
 
-function Table({ deal, cfg, compact, onAnswer, onNext }: { deal: Deal; cfg: Cfg; compact: boolean; onAnswer: (i: number) => void; onNext: () => void }) {
+const SUIT: Record<string, string> = { s: "♠", h: "♥", d: "♦", c: "♣" };
+
+function TCard({ card }: { card?: string }) {
+  if (!card) return <span className="tt-card back" />;
+  return (
+    <span className={cls("tt-card", `s-${card[1]}`)}>
+      <b>{card[0] === "T" ? "10" : card[0]}</b>
+      <i>{SUIT[card[1]]}</i>
+    </span>
+  );
+}
+
+// positions relatives au héros (en bas) : siège, mise et bouton dealer, en % du feutre
+const LAYOUT3 = [
+  { seat: [50, 83], bet: [50, 60], btn: [64, 62] },
+  { seat: [13, 30], bet: [30, 45], btn: [22, 47] },
+  { seat: [87, 30], bet: [70, 45], btn: [78, 47] },
+];
+const LAYOUT2 = [
+  { seat: [50, 83], bet: [50, 60], btn: [64, 62] },
+  { seat: [50, 17], bet: [50, 36], btn: [64, 34] },
+];
+
+function Table({ deal, cfg, width, onAnswer, onNext }: { deal: Deal; cfg: Cfg; width: number; onAnswer: (i: number) => void; onNext: () => void }) {
   const { ps, cards, cell, result } = deal;
   const sp = ps.spot;
   const fmt = sp.state.fmt;
@@ -491,7 +727,6 @@ function Table({ deal, cfg, compact, onAnswer, onNext }: { deal: Deal; cfg: Cfg;
   const hero = sp.state.toAct;
   const colors = actColors(sp.acts);
   const r = replay(fmt, ps.depth, ps.sizes, sp.state.history);
-  // dernière action de chaque joueur
   const lastAct: (string | null)[] = Array(n).fill(null);
   if (r)
     sp.state.history.forEach((id, k) => {
@@ -499,57 +734,76 @@ function Table({ deal, cfg, compact, onAnswer, onNext }: { deal: Deal; cfg: Cfg;
       lastAct[who] = r.acts[k].find((a) => a.id === id)?.label ?? id;
     });
   const pot = sp.state.put.reduce((a, b) => a + b, 0);
-  const seatCls = n === 3 ? SEATS3 : SEATS2;
+  const layout = n === 3 ? LAYOUT3 : LAYOUT2;
   const dealer = pos.indexOf(n === 3 ? "BTN" : "SB");
+  const at = (xy: number[]) => ({ left: `${xy[0]}%`, top: `${xy[1]}%` });
+  // tout le décor est en em : il suit la taille de la table
+  const fs = Math.max(5, Math.min(18, width / 40));
   return (
-    <div className={cls("tr-table", compact && "compact", result && (result.ok ? "ok" : "ko"))}>
-      <div className="tr-spot">{ps.label}</div>
-      <div className="tr-felt">
+    <div className={cls("tt", result && (result.ok ? "ok" : "ko"))} style={{ width, fontSize: fs }}>
+      <div className="tt-spot">{ps.label}</div>
+      <div className="tt-felt" style={{ height: width * FELT_RATIO }}>
+        <div className="tt-rail">
+          <div className="tt-cloth">
+            <img className="tt-logo" src="/logo.png" alt="" />
+          </div>
+        </div>
+        <div className="tt-pot" style={at([50, 38])}>
+          <span className="tt-pot-l">Pot {fmtBB(pot)} bb</span>
+        </div>
         {pos.map((p, i) => {
           const rel = (i - hero + n) % n;
+          const L = layout[rel];
           const put = sp.state.put[i];
-          if (i === hero)
-            return (
-              <div key={p} className="tr-seat s-hero me">
-                {put > 0 && <div className="tr-bet tr-bet-hero">{fmtBB(put)}</div>}
-                <div className="tr-cards">
-                  <PlayingCard card={cards[0]} size={compact ? "md" : "lg"} />
-                  <PlayingCard card={cards[1]} size={compact ? "md" : "lg"} />
-                </div>
-                <div className="tr-info">
-                  <div className="tr-name">
-                    {p}
-                    {i === dealer && <i className="tr-dealer">D</i>}
-                  </div>
-                  <div className="tr-stack">{fmtBB(ps.depth - put)} bb</div>
-                </div>
-              </div>
-            );
+          const folded = sp.state.folded[i];
+          const me = i === hero;
           return (
-            <div key={p} className={cls("tr-seat", seatCls[rel], sp.state.folded[i] && "folded")}>
-              <div className="tr-name">
-                {p}
-                {i === dealer && <i className="tr-dealer">D</i>}
+            <div key={p}>
+              {put > 0 && (
+                <div className={cls("tt-at", folded && "gone")} style={at(L.bet)}>
+                  <Chips bb={put} />
+                </div>
+              )}
+              {i === dealer && (
+                <div className="tt-at" style={at(L.btn)}>
+                  <span className="tt-dealer">D</span>
+                </div>
+              )}
+              <div className={cls("tt-seat", me && "me", folded && "folded")} style={at(L.seat)}>
+                {me ? (
+                  <div className="tt-hand">
+                    <TCard card={cards[0]} />
+                    <TCard card={cards[1]} />
+                  </div>
+                ) : (
+                  !folded && (
+                    <div className="tt-hand small">
+                      <TCard />
+                      <TCard />
+                    </div>
+                  )
+                )}
+                <div className="tt-plate">
+                  <b>{p}</b>
+                  <span>{fmtBB(ps.depth - put)} bb</span>
+                </div>
+                {!me && lastAct[i] && <div className={cls("tt-act", folded ? "fold" : /allin/i.test(lastAct[i]!) ? "ai" : /raise/i.test(lastAct[i]!) ? "raise" : "call")}>{lastAct[i]}</div>}
               </div>
-              <div className="tr-stack">{fmtBB(ps.depth - put)} bb</div>
-              {lastAct[i] && <div className="tr-last-act">{lastAct[i]}</div>}
-              {put > 0 && !sp.state.folded[i] && <div className="tr-bet">{fmtBB(put)}</div>}
             </div>
           );
         })}
-        <div className="tr-pot">Pot {fmtBB(pot)} bb</div>
         {result?.ok && (
-          <div className="tr-flash">
+          <div className="tt-flash">
             ✓ {sp.acts[result.choice].label}
             {result.freq < result.best - 1e-9 && <small> (mixte {num(result.freq * 100, 0)} %)</small>}
           </div>
         )}
       </div>
-      <div className="tr-actions">
+      <div className="tt-actions">
         {sp.acts.map((a, i) => (
           <button
             key={a.id}
-            className={cls("tr-act", result && result.choice === i && (result.ok ? "good" : "bad"))}
+            className={cls("tt-btn", result && result.choice === i && (result.ok ? "good" : "bad"))}
             style={{ background: colors[i] }}
             disabled={!!result}
             onClick={() => onAnswer(i)}
@@ -560,43 +814,43 @@ function Table({ deal, cfg, compact, onAnswer, onNext }: { deal: Deal; cfg: Cfg;
           </button>
         ))}
       </div>
-        {result && !result.ok && (
-          <div className="tr-review">
-            <div className="tr-review-h">
-              <b>{cellName(cell)}</b> · tu as joué <span className="neg">{sp.acts[result.choice].label}</span> ({num(result.freq * 100, 0)} %)
-            </div>
-            <div className="tr-review-s">
-              {sp.acts.map((a, i) =>
-                ps.strat[cell][i] > 0.004 ? (
-                  <span key={a.id}>
-                    <i className="gw-dot" style={{ background: colors[i] }} />
-                    {a.label} {num(ps.strat[cell][i] * 100, 0)} %
-                  </span>
-                ) : null,
-              )}
-            </div>
-            <div className="gw tr-grid">
-              <HandGrid
-                highlight={new Set([cell])}
-                dim={(c) => ps.reach[c] <= 0.001}
-                render={(c) =>
-                  ps.reach[c] > 0.001 ? (
-                    <div className="hg-strat" style={{ height: `${Math.max(6, ps.reach[c] * 100)}%` }}>
-                      {ps.strat[c].map((f, i) => (f > 0.002 ? <i key={i} style={{ width: `${f * 100}%`, background: colors[i] }} /> : null))}
-                    </div>
-                  ) : null
-                }
-              />
-            </div>
-            {cfg.waitClick ? (
-              <button className="gw-btn big" onClick={onNext}>
-                Main suivante (Espace)
-              </button>
-            ) : (
-              <div className="tr-timer" style={{ animationDuration: `${cfg.showMs}ms` }} />
+      {result && !result.ok && (
+        <div className="tt-review">
+          <div className="tt-review-h">
+            <b>{cellName(cell)}</b> · tu as joué <span className="neg">{sp.acts[result.choice].label}</span> ({num(result.freq * 100, 0)} %)
+          </div>
+          <div className="tt-review-s">
+            {sp.acts.map((a, i) =>
+              ps.strat[cell][i] > 0.004 ? (
+                <span key={a.id}>
+                  <i className="gw-dot" style={{ background: colors[i] }} />
+                  {a.label} {num(ps.strat[cell][i] * 100, 0)} %
+                </span>
+              ) : null,
             )}
           </div>
-        )}
+          <div className="gw tt-grid">
+            <HandGrid
+              highlight={new Set([cell])}
+              dim={(c) => ps.reach[c] <= 0.001}
+              render={(c) =>
+                ps.reach[c] > 0.001 ? (
+                  <div className="hg-strat" style={{ height: `${Math.max(6, ps.reach[c] * 100)}%` }}>
+                    {ps.strat[c].map((f, i) => (f > 0.002 ? <i key={i} style={{ width: `${f * 100}%`, background: colors[i] }} /> : null))}
+                  </div>
+                ) : null
+              }
+            />
+          </div>
+          {cfg.waitClick ? (
+            <button className="gw-btn big" onClick={onNext}>
+              Main suivante (Espace)
+            </button>
+          ) : (
+            <div className="tt-timer" style={{ animationDuration: `${cfg.showMs}ms` }} />
+          )}
+        </div>
+      )}
     </div>
   );
 }
