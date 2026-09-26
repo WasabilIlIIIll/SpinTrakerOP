@@ -28,6 +28,8 @@ export interface TreeSizes {
   maxRaiseFrac: number;
   /** nombre de relances non-tapis autorisées (au-delà : tapis seulement) */
   maxRaises: number;
+  /** arbre importé : actions de chaque spot (prioritaires sur les tailles ci-dessus) */
+  explicit?: Record<string, string[]>;
 }
 
 export function defaultSizes(fmt: Fmt): TreeSizes {
@@ -89,9 +91,28 @@ export function rootState(fmt: Fmt, depth: number): State {
 
 export const nodeKey = (s: State) => s.history.join("-");
 
+/** Action d'après son identifiant (`F`, `X`, `C`, `R2.5`, `AI`), dans l'état courant. */
+function actFromId(s: State, id: string): Act | null {
+  const p = s.toAct;
+  const max = Math.max(...s.put);
+  const pos = FORMATS[s.fmt].pos[p];
+  if (id === "F") return { id, kind: "fold", label: "Fold", to: s.put[p] };
+  if (id === "X") return { id, kind: "check", label: "Check", to: s.put[p] };
+  if (id === "C") {
+    const limp = s.raises === 0 && Math.abs(max - 1) < 1e-9 && pos !== "BB";
+    return { id, kind: "call", label: limp ? "Limp" : "Call", to: Math.min(s.depth, max) };
+  }
+  if (id === "AI") return { id, kind: "allin", label: `Allin ${fmtBB(s.depth)}`, to: s.depth };
+  const m = /^R(\d+(?:\.\d+)?)$/.exec(id);
+  if (m) return { id, kind: "raise", label: `Raise ${m[1]}`, to: +m[1] };
+  return null;
+}
+
 /** Actions possibles pour le joueur à parler. */
 export function actions(s: State, sizes: TreeSizes): Act[] {
   if (s.terminal) return [];
+  const ex = sizes.explicit?.[nodeKey(s)];
+  if (ex) return ex.map((id) => actFromId(s, id)).filter((a): a is Act => !!a);
   const p = s.toAct;
   const pos = FORMATS[s.fmt].pos[p];
   const max = Math.max(...s.put);
@@ -208,6 +229,13 @@ export interface DepthBook {
   fmt: Fmt;
   depth: number;
   sizes: TreeSizes;
+  /** origine des ranges (fichier importé) */
+  source?: string;
+  /** mains qui atteignent chaque spot, quand le fichier importé les donne (sinon calculées
+   * à partir des décisions précédentes du joueur) */
+  reach?: Record<string, string>;
+  /** fréquences globales de chaque action d'après le fichier importé (0-1) */
+  freq?: Record<string, Record<string, number>>;
   /** clé de spot -> action -> range texte */
   nodes: Record<string, Record<string, string>>;
   updated: number;
@@ -282,6 +310,8 @@ export function actionTotals(strat: number[][], reach: number[]): { freq: number
 
 /** Range du héros arrivant au spot : produit de ses fréquences aux décisions précédentes. */
 export function heroReach(book: DepthBook | undefined, fmt: Fmt, depth: number, sizes: TreeSizes, history: string[]): number[] {
+  const given = book?.reach?.[history.join("-")];
+  if (given !== undefined) return stringToGrid(given) ?? Array(169).fill(0);
   const reach = Array(169).fill(1);
   const r = replay(fmt, depth, sizes, history);
   if (!r) return reach;
@@ -365,11 +395,85 @@ export const rangesApi = {
   trainerSave: (json: string) => invoke<void>("trainer_save", { json }),
 };
 
-/** Lecture tolérante d'un livre (fichier importé ou ancienne version). */
+/** Coup rejoué à une autre profondeur : même suite d'actions, une relance absente étant
+ * remplacée par la relance la plus proche (ex. SB raise 2.5 à 25 bb -> raise 2 à 13 bb).
+ * S'arrête avant une action impossible ou qui termine le coup. */
+export function mapHistory(fmt: Fmt, depth: number, sizes: TreeSizes, h: string[]): string[] {
+  let s = rootState(fmt, depth);
+  const out: string[] = [];
+  for (const id of h) {
+    const as = actions(s, sizes);
+    let a = as.find((x) => x.id === id);
+    if (!a && id.startsWith("R")) {
+      const want = parseFloat(id.slice(1));
+      const rs = as.filter((x) => x.kind === "raise");
+      if (rs.length) a = rs.reduce((b, x) => (Math.abs(x.to - want) < Math.abs(b.to - want) ? x : b));
+    }
+    if (!a) break;
+    const t = apply(s, a);
+    if (t.terminal) break;
+    out.push(a.id);
+    s = t;
+  }
+  return out;
+}
+
+/** Export de ranges « simplifiées » : `{ depths: { "25": { "ROOT": { hero, actions, hand_action } … } } }`,
+ * une action par main. Converti en livre : l'arbre du fichier devient l'arbre du livre. */
+export function fromSimpleExport(j: unknown): RangeBook | null {
+  const d = (j as { depths?: Record<string, Record<string, { hero: string; actions: Record<string, unknown>; hand_action?: Record<string, string> }>> })?.depths;
+  if (!d || typeof d !== "object") return null;
+  const meta = j as { source?: string; note?: string };
+  const norm = (id: string) => (id === "RAI" ? "AI" : id);
+  const keyOf = (k: string) => (k === "ROOT" ? "" : k.split("-").map(norm).join("-"));
+  const books: DepthBook[] = [];
+  for (const [ds, nodes] of Object.entries(d)) {
+    const depth = parseFloat(ds);
+    if (!(depth > 0)) continue;
+    const fmt: Fmt = Object.values(nodes).some((n) => n.hero === "BTN") ? "spin3" : "hu";
+    const explicit: Record<string, string[]> = {};
+    for (const [k, n] of Object.entries(nodes)) explicit[keyOf(k)] = Object.keys(n.actions ?? {}).map(norm);
+    const out: Record<string, Record<string, string>> = {};
+    const reach: Record<string, string> = {};
+    const freq: Record<string, Record<string, number>> = {};
+    for (const [k, n] of Object.entries(nodes)) {
+      const key = keyOf(k);
+      reach[key] = Object.keys(n.hand_action ?? {}).join(",");
+      freq[key] = Object.fromEntries(
+        Object.entries(n.actions ?? {}).map(([id, a]) => [norm(id), Math.max(0, Number((a as { freq_pct?: number }).freq_pct ?? 0)) / 100]),
+      );
+      const acts = explicit[key];
+      // action implicite (reste) : fold, sinon check / call
+      const imp = acts.includes("F") ? "F" : acts.find((a) => a === "X" || a === "C") ?? acts[0];
+      const lists: Record<string, string[]> = {};
+      for (const [hand, a] of Object.entries(n.hand_action ?? {})) {
+        const id = norm(a);
+        if (id !== imp) (lists[id] ??= []).push(hand);
+      }
+      out[key] = Object.fromEntries(Object.entries(lists).map(([id, hs]) => [id, hs.join(",")]));
+    }
+    books.push({
+      fmt,
+      depth,
+      sizes: { ...defaultSizes(fmt), explicit },
+      source: [meta.source?.trim().replace(/^-\s*/, ""), meta.note].filter(Boolean).join(" · "),
+      nodes: out,
+      reach,
+      freq,
+      updated: Math.floor(Date.now() / 1000),
+    });
+  }
+  return books.length ? { version: 1, books } : null;
+}
+
+/** Lecture tolérante d'un livre (fichier importé, export simplifié ou ancienne version). */
 export function parseBook(json: string | null): RangeBook {
   if (!json) return emptyBook();
   try {
-    const b = JSON.parse(json) as RangeBook;
+    const raw = JSON.parse(json);
+    const simple = fromSimpleExport(raw);
+    if (simple) return simple;
+    const b = raw as RangeBook;
     if (!b || !Array.isArray(b.books)) return emptyBook();
     b.books = b.books
       .filter((x) => (x.fmt === "spin3" || x.fmt === "hu") && x.depth > 0)

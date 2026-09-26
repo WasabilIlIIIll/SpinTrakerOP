@@ -21,6 +21,7 @@ import {
   heroReach,
   implicitIndex,
   isDefined,
+  mapHistory,
   nodeKey,
   parseBook,
   rangesApi,
@@ -128,17 +129,8 @@ function BookMenu({ book, update }: { book: RangeBook; update: (b: RangeBook, no
 
 // ---------------------------------------------------------------- vue / éditeur
 
-/** Plus long début de `h` qui existe dans l'arbre de cette profondeur. */
-function validPrefix(fmt: Fmt, depth: number, sizes: TreeSizes, h: string[]): string[] {
-  for (let k = h.length; k > 0; k--) {
-    const r = replay(fmt, depth, sizes, h.slice(0, k));
-    // un coup terminé (fold, tapis payé) n'a pas de range à montrer : on s'arrête avant
-    if (r && !r.states[r.states.length - 1].terminal) return h.slice(0, k);
-  }
-  return [];
-}
 
-const DEPTHS = [25, 22, 20, 18, 16, 14, 12, 10, 8, 6];
+const DEPTHS = [25, 22, 19, 16, 13, 10, 7, 5];
 
 function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, now?: boolean) => void }) {
   const { prefs, setPrefs, toast } = useApp();
@@ -162,7 +154,7 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
     setCell(null);
   }, [fmt]);
   // tailles modifiées : on garde la partie du coup qui existe encore
-  useEffect(() => setHistory((h) => validPrefix(fmt, depth, sizes, h)), [JSON.stringify(sizes)]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setHistory((h) => mapHistory(fmt, depth, sizes, h)), [JSON.stringify(sizes)]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const r = replay(fmt, depth, sizes, history) ?? replay(fmt, depth, sizes, [])!;
   const cur = r.states[r.states.length - 1];
@@ -173,7 +165,11 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
   const reach = useMemo(() => (spot ? heroReach(db, fmt, depth, sizes, history) : Array(169).fill(1)), [db, fmt, depth, sizes, history, spot]);
   const colors = actColors(acts);
   const view = strat ?? Array.from({ length: 169 }, () => acts.map((_, i) => (i === implicitIndex(acts) ? 1 : 0)));
-  const totals = spot ? actionTotals(view, reach) : null;
+  const computed = spot ? actionTotals(view, reach) : null;
+  // fréquences du solveur données par le fichier importé : prioritaires sur le calcul à partir
+  // de l'action dominante de chaque main, qui les déformerait
+  const fileFreq = spot ? db?.freq?.[spot.key] : undefined;
+  const totals = computed && fileFreq ? { ...computed, freq: acts.map((a) => fileFreq[a.id] ?? 0) } : computed;
   const shown = hover ?? cell;
   useEffect(() => setBrush(Math.min(brush, Math.max(0, acts.length - 1))), [acts.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -189,7 +185,13 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
     const books = i < 0 ? [...book.books, nb] : book.books.map((b, k) => (k === i ? nb : b));
     update({ version: 1, books }, now);
   };
-  const setStrat = (s: number[][]) => spot && putBook(storeStrategy(ensureBook(), spot, s));
+  const setStrat = (s: number[][]) => {
+    if (!spot) return;
+    const nb = storeStrategy(ensureBook(), spot, s);
+    // spot modifié à la main : les fréquences du fichier importé ne s'appliquent plus
+    if (nb.freq?.[spot.key]) nb.freq = Object.fromEntries(Object.entries(nb.freq).filter(([k]) => k !== spot.key));
+    putBook(nb);
+  };
 
   // pinceau : l'action choisie reçoit `weight`, les autres se partagent le reste
   const paintCell = (c: number, base: number[][]) => {
@@ -230,7 +232,7 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
   // changement de profondeur : on reste sur le même coup (ex. BTN Raise 2 · SB Call · BB ?)
   const onDepth = (d: number) => {
     const nsizes = findBook(book, fmt, d)?.sizes ?? defaultSizes(fmt);
-    const kept = validPrefix(fmt, d, nsizes, history);
+    const kept = mapHistory(fmt, d, nsizes, history);
     if (kept.length < history.length) toast(`Ce coup n'existe pas à ${fmtBB(d)} bb : retour à la dernière décision possible`);
     setHistory(kept);
     setPrefs({ rangesDepth: d });
@@ -417,10 +419,16 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
                   <div className="gw-box-l">{a.label}</div>
                   <div className="gw-box-v">
                     <b>{defined && totals ? `${num(totals.freq[i] * 100, 1)}%` : "–"}</b>
-                    <span>
-                      {defined && totals ? num(totals.combos[i], 1) : ""}
-                      <small>combos</small>
-                    </span>
+                    {fileFreq ? (
+                      <span>
+                        <small>solveur</small>
+                      </span>
+                    ) : (
+                      <span>
+                        {defined && totals ? num(totals.combos[i], 1) : ""}
+                        <small>combos</small>
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}
@@ -480,8 +488,10 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
         </div>
       )}
       <div className="gw-src">
-        Ranges personnelles · {FORMATS[fmt].label} · tapis {fmtBB(depth)} bb symétriques · open {Object.entries(sizes.open).map(([p, v]) => `${p} ${fmtBB(v)}`).join(", ")} · 3-bet {fmtBB(sizes.threeBet)}× · au-delà de{" "}
-        {sizes.maxRaises} relances ou {num(sizes.maxRaiseFrac * 100, 0)} % du tapis : tapis seulement
+        {db?.source ? `Ranges importées : ${db.source} (grille : action dominante de chaque main ; pourcentages : fréquences du solveur)` : "Ranges personnelles"} · {FORMATS[fmt].label} · tapis {fmtBB(depth)} bb symétriques ·{" "}
+        {sizes.explicit
+          ? `arbre du fichier (${Object.keys(sizes.explicit).length} spots, tailles propres à chaque spot)`
+          : `open ${Object.entries(sizes.open).map(([p, v]) => `${p} ${fmtBB(v)}`).join(", ")} · 3-bet ${fmtBB(sizes.threeBet)}× · au-delà de ${sizes.maxRaises} relances ou ${num(sizes.maxRaiseFrac * 100, 0)} % du tapis : tapis seulement`}
       </div>
       {paste != null && spot && <PasteModal action={acts[paste].label} initial={gridToString(view.map((row) => row[paste]))} onClose={() => setPaste(null)} onApply={(t) => applyText(paste, t)} />}
       {sizesOpen && (
@@ -529,6 +539,11 @@ function SizesModal({ fmt, sizes, onClose, onSave }: { fmt: Fmt; sizes: TreeSize
   return (
     <Modal title="Tailles de l'arbre" onClose={onClose}>
       <div className="col gap12">
+        {s.explicit && (
+          <div className="tr-last">
+            Arbre importé : les actions et tailles de ses {Object.keys(s.explicit).length} spots viennent du fichier. Les réglages ci-dessous ne s'appliquent qu'aux spots absents du fichier.
+          </div>
+        )}
         {openers.map((p) => (
           <div key={p} className="row gap12">
             <b style={{ width: 40 }}>{p}</b>
@@ -570,7 +585,7 @@ function SizesModal({ fmt, sizes, onClose, onSave }: { fmt: Fmt; sizes: TreeSize
           <span className="muted small">% du tapis (au-delà : tapis)</span>
         </div>
         <div className="row gap8">
-          <Btn small onClick={() => setS(defaultSizes(fmt))}>
+          <Btn small onClick={() => setS({ ...defaultSizes(fmt), explicit: s.explicit })}>
             Par défaut
           </Btn>
           <div className="grow" />

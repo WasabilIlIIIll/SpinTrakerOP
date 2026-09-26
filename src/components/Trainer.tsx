@@ -9,6 +9,7 @@ import { cls, num } from "../lib/format";
 import {
   FORMATS,
   actColors,
+  actionTotals,
   cellName,
   dealCell,
   enumerate,
@@ -24,6 +25,7 @@ import {
   strategy,
   type Fmt,
   type RangeBook,
+  type DepthBook,
   type Spot,
   type TreeSizes,
 } from "../lib/ranges";
@@ -40,9 +42,11 @@ interface Cfg {
   showMs: number;
   waitClick: boolean;
   fewerTrivial: boolean;
+  /** tirage des spots selon la fréquence réelle du coup (sinon uniforme) */
+  realistic: boolean;
 }
 
-const DEFAULT_CFG: Cfg = { fmt: "spin3", depths: [], tables: 1, positions: [], off: [], threshold: 0.1, showMs: 5000, waitClick: false, fewerTrivial: true };
+const DEFAULT_CFG: Cfg = { fmt: "spin3", depths: [], tables: 1, positions: [], off: [], threshold: 0.1, showMs: 5000, waitClick: false, fewerTrivial: true, realistic: true };
 
 interface PoolSpot {
   id: string;
@@ -52,6 +56,8 @@ interface PoolSpot {
   strat: number[][];
   reach: number[];
   sizes: TreeSizes;
+  /** probabilité que le coup arrive jusqu'à ce spot (produit des fréquences des actions) */
+  prob: number;
 }
 
 interface Deal {
@@ -82,17 +88,53 @@ function buildPool(book: RangeBook, fmt: Fmt, depths: number[], positions: strin
       if (off.includes(id)) continue;
       const strat = strategy(db, sp);
       if (!strat) continue;
-      out.push({ id, depth, spot: sp, label: `${fmtBB(depth)} bb · ${spotLabel(sp, db.sizes)}`, strat, reach: heroReach(db, fmt, depth, db.sizes, sp.state.history), sizes: db.sizes });
+      // spot qu'aucune main n'atteint (ligne jamais jouée) : rien à entraîner
+      if (!heroReach(db, fmt, depth, db.sizes, sp.state.history).some((w) => w > 0)) continue;
+      out.push({ id, depth, prob: lineProb(db, fmt, depth, sp.state.history), spot: sp, label: `${fmtBB(depth)} bb · ${spotLabel(sp, db.sizes)}`, strat, reach: heroReach(db, fmt, depth, db.sizes, sp.state.history), sizes: db.sizes });
     }
   }
   return out;
 }
 
+/** Fréquence d'une ligne : produit des fréquences globales de chaque action jouée
+ * (celles du fichier importé quand il les donne, sinon calculées sur les ranges). */
+function lineProb(db: DepthBook, fmt: Fmt, depth: number, history: string[]): number {
+  const r = replay(fmt, depth, db.sizes, history);
+  if (!r) return 0;
+  let p = 1;
+  for (let k = 0; k < history.length; k++) {
+    const s = r.states[k];
+    const key = history.slice(0, k).join("-");
+    const acts = r.acts[k];
+    const i = acts.findIndex((a) => a.id === history[k]);
+    const given = db.freq?.[key]?.[history[k]];
+    if (given !== undefined) p *= given;
+    else {
+      const sp: Spot = { key, state: s, acts, hero: FORMATS[fmt].pos[s.toAct] };
+      const st = strategy(db, sp);
+      if (st) p *= actionTotals(st, heroReach(db, fmt, depth, db.sizes, history.slice(0, k))).freq[i];
+    }
+  }
+  return p;
+}
+
 let dealNo = 0;
 
-function newDeal(pool: PoolSpot[], fewerTrivial: boolean): Deal | null {
+function pickSpot(pool: PoolSpot[], realistic: boolean): PoolSpot {
+  if (!realistic) return pool[Math.floor(Math.random() * pool.length)];
+  // un minimum pour que les lignes rares restent possibles
+  const w = pool.map((p) => Math.max(p.prob, 0.002));
+  let r = Math.random() * w.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < pool.length; i++) {
+    r -= w[i];
+    if (r <= 0) return pool[i];
+  }
+  return pool[pool.length - 1];
+}
+
+function newDeal(pool: PoolSpot[], fewerTrivial: boolean, realistic: boolean): Deal | null {
   for (let tries = 0; tries < 30; tries++) {
-    const ps = pool[Math.floor(Math.random() * pool.length)];
+    const ps = pickSpot(pool, realistic);
     const imp = implicitIndex(ps.spot.acts);
     const cell = sampleCell((c) => {
       const w = ps.reach[c];
@@ -219,6 +261,16 @@ export function Trainer({ book }: { book: RangeBook }) {
               </button>
             </div>
           </Row>
+          <Row label="Tirage des spots" help="Réaliste : chaque spot sort selon la fréquence réelle du coup (un open BTN bien plus souvent qu'une ligne 4-bet rare). Uniforme : tous les spots cochés à égalité.">
+            <div className="row gap6">
+              <button className={cls("fchip", cfg.realistic && "on")} onClick={() => setCfg({ realistic: true })}>
+                Réaliste
+              </button>
+              <button className={cls("fchip", !cfg.realistic && "on")} onClick={() => setCfg({ realistic: false })}>
+                Uniforme
+              </button>
+            </div>
+          </Row>
           <label className="row gap8 small">
             <input type="checkbox" checked={cfg.fewerTrivial} onChange={(e) => setCfg({ fewerTrivial: e.target.checked })} />
             Moins de mains évidentes (folds purs 5 fois moins souvent)
@@ -314,7 +366,7 @@ function Session({
   setProgress: (p: Progress) => void;
   onStop: (s: { n: number; ok: number }) => void;
 }) {
-  const [deals, setDeals] = useState<(Deal | null)[]>(() => Array.from({ length: cfg.tables }, () => newDeal(pool, cfg.fewerTrivial)));
+  const [deals, setDeals] = useState<(Deal | null)[]>(() => Array.from({ length: cfg.tables }, () => newDeal(pool, cfg.fewerTrivial, cfg.realistic)));
   const [score, setScore] = useState({ n: 0, ok: 0, streak: 0, best: 0 });
   const prog = useRef(progress);
   const saveT = useRef<number | undefined>(undefined);
@@ -332,7 +384,7 @@ function Session({
     [],
   );
 
-  const next = (t: number) => setDeals((ds) => ds.map((d, i) => (i === t ? newDeal(pool, cfg.fewerTrivial) : d)));
+  const next = (t: number) => setDeals((ds) => ds.map((d, i) => (i === t ? newDeal(pool, cfg.fewerTrivial, cfg.realistic) : d)));
 
   const answer = (t: number, choice: number) => {
     const d = dealsRef.current[t];
