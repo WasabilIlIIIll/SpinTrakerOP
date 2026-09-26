@@ -13,6 +13,10 @@ pub mod preflop;
 pub mod ranges;
 pub mod spot;
 
+/// Solver coupé (26/09/2026) : remplacé par l'onglet Ranges. Toutes les commandes de calcul
+/// refusent de démarrer tant que cette constante est fausse.
+pub const ENABLED: bool = false;
+
 use crate::db::Db;
 use parking_lot::Mutex;
 use postflop_solver::{compute_exploitability, finalize, load_data_from_file, save_data_to_file, solve_step, BoardState, PostFlopGame};
@@ -75,15 +79,18 @@ impl Hub {
     pub fn new(data_dir: &std::path::Path) -> Hub {
         let dir = data_dir.join("solves");
         let _ = std::fs::create_dir_all(&dir);
-        Hub { dir, job: Mutex::new(None), cancel: AtomicBool::new(false), locked: AtomicBool::new(false), open: Mutex::new(None), tri: Mutex::new(None), open_pre: Mutex::new(None) }
+        Hub { dir, job: Mutex::new(None), cancel: AtomicBool::new(false), locked: AtomicBool::new(!ENABLED), open: Mutex::new(None), tri: Mutex::new(None), open_pre: Mutex::new(None) }
     }
 
     pub fn file(&self, id: i64) -> PathBuf {
         self.dir.join(format!("{id}.bin"))
     }
 
-    /// Refus de tout calcul en mode session.
+    /// Refus de tout calcul en mode session, ou quand le solver est désactivé.
     pub fn guard(&self) -> Result<(), String> {
+        if !ENABLED {
+            return Err("le solver est désactivé dans cette version (remplacé par l'onglet Ranges)".into());
+        }
         if self.locked.load(Ordering::SeqCst) {
             return Err("mode session actif : le solver est coupé. Désactive-le dans le menu pour calculer.".into());
         }
@@ -274,6 +281,7 @@ impl Hub {
     /// Réécrit le fichier d'un solve en ne gardant que le flop (`keep_turn = false`) ou le flop et
     /// le turn. Irréversible : les streets retirées devront être re-résolues. Renvoie la taille.
     pub fn lighten(&self, id: i64, cfg_json: &str, keep_turn: bool) -> Result<i64, String> {
+        self.guard()?;
         let path = self.file(id);
         let tmp = self.dir.join(format!("{id}.tmp"));
         self.with_open(id, cfg_json, |op| {

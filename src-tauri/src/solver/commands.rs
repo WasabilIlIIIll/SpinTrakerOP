@@ -193,7 +193,7 @@ pub async fn solver_kill_all(state: State<'_, AppState>) -> R<Value> {
 
 #[tauri::command]
 pub fn solver_lock(state: State<AppState>, on: bool) {
-    state.solver.locked.store(on, std::sync::atomic::Ordering::SeqCst);
+    state.solver.locked.store(on || !super::ENABLED, std::sync::atomic::Ordering::SeqCst);
 }
 
 #[tauri::command]

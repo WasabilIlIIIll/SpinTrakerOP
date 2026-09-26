@@ -102,27 +102,26 @@ Les tables de multiplicateurs sont **éditables** (Paramètres → Multiplicateu
 automatiquement renormalisées sur le retour réel au joueur de vos tournois : même si les
 probabilités officielles de votre room changent, l'EV reste juste.
 
-## Solver GTO
+## Ranges préflop et trainer
 
-Onglet **Solver** (et bouton **Solver la main** dans le Replayer) :
+Onglet **Ranges** :
 
-- **Postflop tête-à-tête** : arbre complet flop → turn → river aux tailles Spin (33 / 55 / 100 / 150 %
-  du pot, relance 3× et all-in, donk bets), résolu en Discounted CFR jusqu'à la précision
-  visée (1 %, 0,3 % ou 0,1 % du pot d'exploitabilité, mesurée et affichée). Grille 13×13 des
-  stratégies, CEV de **chaque action** pour chaque main, équité, EQR, distribution d'équité.
-- **Solver la main** : le spot est reconstruit depuis l'historique (pot, tapis effectif,
-  positions, tailles réellement jouées ajoutées à l'arbre) ; « Suivre la main jouée » compare
-  chacune de vos décisions à la solution et chiffre la CEV perdue.
-- **Ranges** (façon Flopzilla) : répartition d'une range sur un board (paires, tirages…),
-  équité exacte main par main contre une range adverse.
-- **Historique** des solves, favoris, notes, corbeille ; les arbres sont stockés compressés
-  dans le sous-dossier `solves/` des données.
+- **Ranges préflop** : tes ranges personnelles, vues comme sur GTO Wizard. En haut, le format
+  (Spin 3-max ou tête-à-tête), la profondeur (tapis symétriques, 25 bb maximum) et le coup de
+  chaque joueur (BTN Fold / Raise 2 / Allin, puis SB, puis BB…). Grille 13×13 colorée par
+  action, fréquences et combos de chaque action, tableau des mains.
+- **Éditeur** : pinceau par action et par poids (100 / 75 / 50 / 25 %), ou collage d'une range
+  texte (`AA,AKs:0.5,22+,A2s+,KTo-K8o`). Tailles de l'arbre réglables (open, limp, 3-bet…).
+- **Trainer** : 1 à 6 tables, positions choisies ou aléatoires, spots tirés parmi tes ranges.
+  Bonne réponse : main suivante. Erreur : la range du spot s'affiche avec ta main entourée
+  en violet pendant quelques secondes. Progression enregistrée par spot.
 
-Valeurs en bb, **sans ICM** (le vainqueur rafle le prize pool). Les pots à 3 joueurs et le
-solver préflop arrivent dans les prochaines versions. Mémoire indicative (Ryzen 7 5800X) : un
-flop BTN min-raise / BB call à 23 bb avec le profil *Standard* (4 tailles au flop, 2 au turn et
-à la river) occupe 8,8 Go et atteint 0,3 % du pot en moins de 5 minutes ; 4 tailles sur les
-trois streets demandent 25 Go. Un solve qui démarre au turn tient en quelques centaines de Mo.
+Les ranges sont dans `ranges.json` à côté de la base (format décrit dans
+[docs/RANGES.md](docs/RANGES.md)), exportables et importables. **Aucune range n'est fournie
+avec l'application** : elles sont personnelles.
+
+Le solver GTO développé auparavant est **désactivé** (code conservé dans `src-tauri/src/solver`,
+constante `ENABLED`) : aucune de ses commandes de calcul ne peut démarrer.
 
 ## Changer le logo
 

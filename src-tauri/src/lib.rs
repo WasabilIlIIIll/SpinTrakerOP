@@ -8,6 +8,7 @@ pub mod import;
 pub mod model;
 pub mod parser;
 pub mod settings;
+pub mod ranges;
 pub mod solver;
 pub mod stats;
 pub mod store;
@@ -203,6 +204,12 @@ pub fn run() {
             commands::backup_database,
             commands::export_csv,
             commands::scenarios,
+            ranges::ranges_load,
+            ranges::ranges_save,
+            ranges::ranges_export,
+            ranges::ranges_import,
+            ranges::trainer_load,
+            ranges::trainer_save,
             solver::commands::solver_defaults,
             solver::commands::solver_spot_from_hand,
             solver::commands::solver_start_postflop,

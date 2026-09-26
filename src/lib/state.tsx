@@ -36,6 +36,10 @@ export interface UiPrefs {
   dashboardTab: string;
   page: string;
   eventsLayout: "vedette" | "compact" | "liste";
+  rangesFmt?: "spin3" | "hu";
+  rangesDepth?: number;
+  /** réglages du trainer (voir components/Trainer.tsx) */
+  trainer?: Record<string, unknown>;
 }
 
 export const ALL_KPIS = ["tournaments", "cev", "rakeback", "profit", "roi", "hourly", "time", "luck", "finish", "avg_buyin", "spins_h", "min_cev"];
