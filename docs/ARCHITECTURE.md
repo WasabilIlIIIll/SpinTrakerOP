@@ -15,9 +15,11 @@ spin-tracker-op/
 │   │   ├── db.rs          SQLite (mains sérialisées en MessagePack)
 │   │   ├── import.rs      pipeline d'import parallèle
 │   │   ├── stats/         calculs : summary, charts, breakdown, players, leaks, challenges
+│   │   ├── solver/        solver GTO : ranges et analyseur (Flopzilla), postflop, spots, tâches
 │   │   ├── commands.rs    commandes exposées au front
 │   │   ├── bin/cli.rs     outil en ligne de commande (import headless)
 │   │   └── lib.rs         état applicatif, chargement asynchrone
+│   ├── crates/postflop-solver  fork du moteur postflop (AGPL-3.0, voir sa licence)
 │   └── tests/samples.rs   test d'intégration sur des historiques réels
 └── src/                   interface React + TypeScript
     ├── lib/               api (invoke), état global, thèmes, formats, i18n
@@ -75,3 +77,25 @@ fin correspond au tapis de début de la main suivante.
   différé (400 ms) pour ne jamais bloquer l'interface.
 - **Cache de requêtes** : `useQuery` mémorise les réponses par clé ; `version` est incrémenté
   après un import ou un changement de paramètre pour tout invalider.
+
+## Solver
+
+- **Moteur** : `crates/postflop-solver`, fork de b-inary/postflop-solver (Discounted CFR,
+  isomorphismes, compression 16 bits). Corrections de compatibilité seulement (bincode épinglé
+  en 2.0.0-rc.3, emprunts explicites exigés par Rust récent).
+- **`solver/postflop.rs`** : `PostflopConfig` (bb, tailles par street en % du pot, relances en ×)
+  → arbre du moteur (1 bb = 100 unités) ; `node_view` renvoie pour un nœud la stratégie, la CEV
+  de chaque action par main, l'équité, l'EQR et la grille 13×13.
+- **`solver/spot.rs`** : main importée → spot postflop (pot et tapis effectif en bb, OOP / IP,
+  tailles jouées hors arbre ajoutées pour ce solve, ligne réelle pour « Suivre la main jouée »).
+- **`solver/mod.rs`** (`Hub`) : un solve à la fois dans un thread, progression interrogée par le
+  front, arrêt propre, fichier `solves/<id>.bin` (zstd), arbre ouvert gardé en mémoire.
+- **`solver/ranges.rs`** : ranges, catégories de mains, équité exacte combo par combo par
+  balayage trié (retrait de cartes par inclusion-exclusion), ordre préflop des 169 cases.
+- **Historique** : table `solves` (paramètres JSON, état, précision atteinte, durée, taille,
+  favori, note, corbeille).
+- **Vérifications** : `cargo test --lib solver` (conservation des jetons, convergence,
+  équité identique au moteur du tracker, catégories) ; `spinop-cli spots` reconstruit le spot de
+  toutes les mains de la base et signale toute mise supérieure au tapis effectif ;
+  `spinop-cli solve-hand <id> <range OOP> <range IP> [précision %]` fait un solve complet
+  (fichier compris) sans interface.

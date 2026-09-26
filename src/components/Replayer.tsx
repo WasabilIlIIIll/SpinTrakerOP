@@ -6,6 +6,7 @@ import { Icon } from "./Icon";
 import { Help, Loading, Seg, Tags, Toggle } from "./ui";
 import { cls, date, mult, num, signed, tone } from "../lib/format";
 import { t } from "../lib/i18n";
+import { pending } from "../lib/solver";
 
 interface SeatState {
   stack: number;
@@ -116,7 +117,7 @@ function buildSteps(h: HandDetail, fmt: (v: number) => string): Step[] {
 }
 
 export function Replayer({ id, onNav }: { id: string; onNav?: (id: string) => void }) {
-  const { prefs, setPrefs, open, bump, toast } = useApp();
+  const { prefs, setPrefs, open, bump, toast, go } = useApp();
   const { data: h } = useQuery(["hand", id], () => api.handDetail(id));
   const [inBB, setInBB] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -187,6 +188,19 @@ export function Replayer({ id, onNav }: { id: string; onNav?: (id: string) => vo
           </button>
           <Toggle on={inBB} onChange={setInBB} label="en BB" />
           <Toggle on={showAll} onChange={setShowAll} label="Cartes visibles" />
+          {h.board.length >= 3 && (
+            <button
+              className="btn btn-soft btn-sm"
+              title="Ouvrir le spot postflop de cette main dans le Solver"
+              onClick={() => {
+                pending.handId = h.id;
+                open(null);
+                go("solver");
+              }}
+            >
+              <Icon name="zap" size={13} /> Solver la main
+            </button>
+          )}
           <button className="btn btn-ghost btn-sm" onClick={() => open({ type: "tournament", id: h.tid })}>
             <Icon name="trophy" size={13} /> Tournoi
           </button>

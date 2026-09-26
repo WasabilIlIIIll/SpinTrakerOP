@@ -11,9 +11,11 @@ import { LeakFinder } from "./pages/LeakFinder";
 import { Challenges } from "./pages/Challenges";
 import { ImportPage } from "./pages/Import";
 import { SettingsPage } from "./pages/Settings";
+import { SolverPage } from "./pages/Solver";
 import { cls } from "./lib/format";
 import { t } from "./lib/i18n";
 import { Spinner } from "./components/ui";
+import { SolverGuard } from "./components/SolverGuard";
 
 const NAV: [string, string, string][] = [
   ["dashboard", "Tableau de bord", "dashboard"],
@@ -21,6 +23,7 @@ const NAV: [string, string, string][] = [
   ["hands", "Mains", "cards"],
   ["players", "Joueurs", "users"],
   ["leaks", "Leak finder", "search"],
+  ["solver", "Solver", "zap"],
   ["challenges", "Challenges", "flag"],
   ["import", "Import", "upload"],
   ["settings", "Paramètres", "settings"],
@@ -30,7 +33,7 @@ export function App() {
   const { page, go, prefs, setPrefs, ready, toasts, overview } = useApp();
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key >= "1" && e.key <= "8") {
+      if (e.ctrlKey && e.key >= "1" && e.key <= "9") {
         e.preventDefault();
         go(NAV[+e.key - 1][0]);
       }
@@ -59,6 +62,7 @@ export function App() {
           ))}
         </nav>
         <div className="side-foot">
+          <SolverGuard />
           <button className="nav" onClick={() => setPrefs({ privacy: { ...prefs.privacy, __all: !prefs.privacy["__all"] } })} title="Mode discret">
             <Icon name={prefs.privacy["__all"] ? "eyeoff" : "eye"} size={17} />
             <span>Mode discret</span>
@@ -84,6 +88,7 @@ export function App() {
             {page === "hands" && <Hands />}
             {page === "players" && <Players />}
             {page === "leaks" && <LeakFinder />}
+            {page === "solver" && <SolverPage />}
             {page === "challenges" && <Challenges />}
             {page === "import" && <ImportPage />}
             {page === "settings" && <SettingsPage />}

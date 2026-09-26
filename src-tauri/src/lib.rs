@@ -8,6 +8,7 @@ pub mod import;
 pub mod model;
 pub mod parser;
 pub mod settings;
+pub mod solver;
 pub mod stats;
 pub mod store;
 
@@ -24,6 +25,7 @@ pub struct AppState {
     pub ready: Arc<AtomicBool>,
     /// message à afficher au démarrage (restauration de sauvegarde…)
     pub notice: Arc<Mutex<Option<String>>>,
+    pub solver: Arc<solver::Hub>,
 }
 
 #[tauri::command]
@@ -108,6 +110,7 @@ pub fn open_state(dir: &std::path::Path) -> Result<AppState, String> {
     let db_path = dir.join("spintracker.db");
     let (db, recovery_note) = open_db_safely(dir, &db_path)?;
     daily_backup(&db, dir);
+    db.solve_mark_interrupted();
     let mut st = store::Store::default();
     if let Some(js) = db.kv_get("settings") {
         if let Ok(s) = serde_json::from_str::<settings::Settings>(&js) {
@@ -125,11 +128,15 @@ pub fn open_state(dir: &std::path::Path) -> Result<AppState, String> {
         db_path,
         ready: Arc::new(AtomicBool::new(false)),
         notice: Arc::new(Mutex::new(recovery_note)),
+        solver: Arc::new(solver::Hub::new(dir)),
     })
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // calculs du solver : on laisse toujours deux cœurs à l'interface
+    let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+    let _ = rayon::ThreadPoolBuilder::new().num_threads(cores.saturating_sub(2).max(1)).build_global();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
@@ -196,6 +203,32 @@ pub fn run() {
             commands::backup_database,
             commands::export_csv,
             commands::scenarios,
+            solver::commands::solver_defaults,
+            solver::commands::solver_spot_from_hand,
+            solver::commands::solver_start_postflop,
+            solver::commands::solver_status,
+            solver::commands::solver_cancel,
+            solver::commands::solver_node,
+            solver::commands::solver_history,
+            solver::commands::solver_update,
+            solver::commands::solver_trash,
+            solver::commands::solver_purge,
+            solver::commands::solver_estimate,
+            solver::commands::range_analyze,
+            solver::commands::range_order,
+            solver::commands::range_lab,
+            solver::commands::allin_calc,
+            solver::commands::solver_kill_all,
+            solver::commands::solver_lock,
+            solver::commands::solver_state,
+            solver::commands::solver_prepare_tables,
+            solver::commands::app_restart,
+            solver::commands::solver_lighten,
+            solver::commands::solver_preflop_defaults,
+            solver::commands::solver_preflop_start,
+            solver::commands::solver_preflop_batch,
+            solver::commands::solver_preflop_view,
+            solver::commands::solver_preflop_to_postflop,
         ])
         .build(tauri::generate_context!())
         .expect("erreur au lancement de Spin Tracker OP")

@@ -102,6 +102,28 @@ Les tables de multiplicateurs sont **éditables** (Paramètres → Multiplicateu
 automatiquement renormalisées sur le retour réel au joueur de vos tournois : même si les
 probabilités officielles de votre room changent, l'EV reste juste.
 
+## Solver GTO
+
+Onglet **Solver** (et bouton **Solver la main** dans le Replayer) :
+
+- **Postflop tête-à-tête** : arbre complet flop → turn → river aux tailles Spin (33 / 55 / 100 / 150 %
+  du pot, relance 3× et all-in, donk bets), résolu en Discounted CFR jusqu'à la précision
+  visée (1 %, 0,3 % ou 0,1 % du pot d'exploitabilité, mesurée et affichée). Grille 13×13 des
+  stratégies, CEV de **chaque action** pour chaque main, équité, EQR, distribution d'équité.
+- **Solver la main** : le spot est reconstruit depuis l'historique (pot, tapis effectif,
+  positions, tailles réellement jouées ajoutées à l'arbre) ; « Suivre la main jouée » compare
+  chacune de vos décisions à la solution et chiffre la CEV perdue.
+- **Ranges** (façon Flopzilla) : répartition d'une range sur un board (paires, tirages…),
+  équité exacte main par main contre une range adverse.
+- **Historique** des solves, favoris, notes, corbeille ; les arbres sont stockés compressés
+  dans le sous-dossier `solves/` des données.
+
+Valeurs en bb, **sans ICM** (le vainqueur rafle le prize pool). Les pots à 3 joueurs et le
+solver préflop arrivent dans les prochaines versions. Mémoire indicative (Ryzen 7 5800X) : un
+flop BTN min-raise / BB call à 23 bb avec le profil *Standard* (4 tailles au flop, 2 au turn et
+à la river) occupe 8,8 Go et atteint 0,3 % du pot en moins de 5 minutes ; 4 tailles sur les
+trois streets demandent 25 Go. Un solve qui démarre au turn tient en quelques centaines de Mo.
+
 ## Changer le logo
 
 Remplacez `app-icon.svg` (ou déposez un PNG carré d'au moins 1024 px) puis lancez :
@@ -138,6 +160,11 @@ nouvelles statistiques. Voir [CONTRIBUTING.md](CONTRIBUTING.md).
 
 [GPL-3.0](LICENSE) — libre d'utilisation, de modification et de redistribution, à condition
 que les versions dérivées restent open source.
+
+Le moteur postflop est un fork de [postflop-solver](https://github.com/b-inary/postflop-solver)
+(Wataru Inariba), sous licence AGPL-3.0 : son code se trouve dans
+`src-tauri/crates/postflop-solver` avec sa licence d'origine. La GPL-3.0 (article 13) autorise
+cet assemblage ; l'application qui l'intègre respecte aussi les conditions de l'AGPL-3.0.
 
 > Spin Tracker OP n'est affilié à aucune room de poker. Vérifiez que l'usage d'un tracker
 > est autorisé par les conditions d'utilisation de votre room.

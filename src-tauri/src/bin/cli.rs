@@ -5,7 +5,7 @@
 //!   spinop-cli summary                    affiche les indicateurs principaux
 //!   spinop-cli kv ui "{...}"              écrit une préférence d'interface
 
-use spin_tracker_op_lib::{import, open_state, stats};
+use spin_tracker_op_lib::{import, open_state, solver, stats};
 use std::path::PathBuf;
 
 fn data_dir() -> PathBuf {
@@ -200,9 +200,173 @@ fn main() {
             state.db.lock().kv_set(&args[1], &args[2]).expect("écriture impossible");
             println!("ok");
         }
+        // reconstruction des spots postflop (solver) sur toutes les mains de la base
+        Some("spots") => {
+            {
+                let mut db = state.db.lock();
+                let mut st = state.store.write();
+                import::load(&mut db, &mut st).ok();
+            }
+            let s = state.store.read();
+            let mut ok = 0;
+            let mut reasons: std::collections::BTreeMap<String, usize> = Default::default();
+            let mut shown = 0;
+            for r in &s.hands {
+                if r.h.board.len() < 3 {
+                    continue;
+                }
+                match solver::spot::from_hand(&r.h) {
+                    Ok(sp) => {
+                        ok += 1;
+                        if shown < 6 {
+                            shown += 1;
+                            println!(
+                                "{} · {} · pot {} bb · eff {} bb · {} vs {} · ligne {:?}",
+                                r.h.id,
+                                sp.preflop,
+                                sp.config.pot,
+                                sp.config.stack,
+                                sp.config.oop_label,
+                                sp.config.ip_label,
+                                sp.line.iter().map(|l| format!("{}{}:{}{:.2}", l.street, if l.side == 0 { "O" } else { "I" }, l.kind, l.to)).collect::<Vec<_>>()
+                            );
+                        }
+                        // contrôle : les mises postflop ne dépassent jamais le tapis effectif
+                        let mut put = [[0.0f64; 2]; 4];
+                        for l in &sp.line {
+                            put[l.street as usize][l.side as usize] = l.to;
+                        }
+                        let used: f64 = (1..4).map(|st| put[st][0].min(put[st][1]).max(0.0)).sum();
+                        if used > sp.config.stack + 0.02 {
+                            *reasons.entry("INCOHÉRENCE : mises > tapis effectif".into()).or_default() += 1;
+                        }
+                    }
+                    Err(e) => *reasons.entry(e).or_default() += 1,
+                }
+            }
+            println!("{ok} spots postflop reconstruits");
+            for (k, v) in reasons {
+                println!("  {v:>6} × {k}");
+            }
+        }
+        // solve complet d'une main : spot, calcul, fichier, relecture de la racine
+        Some("solve-hand") if args.len() >= 4 => {
+            {
+                let mut db = state.db.lock();
+                let mut st = state.store.write();
+                import::load(&mut db, &mut st).ok();
+            }
+            let spot = {
+                let s = state.store.read();
+                let r = s.hands.iter().find(|r| r.h.id == args[1]).expect("main introuvable");
+                solver::spot::from_hand(&r.h).expect("spot")
+            };
+            let mut cfg = spot.config.clone();
+            cfg.oop_range = args[2].clone();
+            cfg.ip_range = args[3].clone();
+            if let Some(p) = args.get(4) {
+                cfg.precision = p.parse().unwrap_or(1.0);
+            }
+            let id = state.solver.start_postflop(state.db.clone(), cfg, Some(args[1].clone()), spot.preflop.clone()).expect("lancement");
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(1000));
+                let j = state.solver.job.lock().clone().unwrap();
+                println!("  it {} · {:.1} s · précision {:?} %", j.iter, j.seconds, j.exploit);
+                if j.state != "running" {
+                    println!("état : {} {}", j.state, j.message);
+                    break;
+                }
+            }
+            // relecture depuis le fichier (et non depuis la mémoire)
+            *state.solver.open.lock() = None;
+            let (cfg_json, _) = state.db.lock().solve_config(id).unwrap();
+            let v = state.solver.with_open(id, &cfg_json, |op| solver::postflop::node_view(&mut op.game, &[], &op.cfg, Some(&mut op.rivers))).expect("relecture");
+            println!("actions : {}", v["actions"]);
+            println!("fréquences : {}", v["freq"]);
+            println!("résumé : {}", v["summary"].as_array().unwrap().iter().map(|x| format!("CEV {:.2} bb, équité {:.3}, EQR {}", x["ev"].as_f64().unwrap(), x["equity"].as_f64().unwrap(), x["eqr"])).collect::<Vec<_>>().join(" | "));
+            println!("pot {} bb · fichier {} octets", v["pot"], std::fs::metadata(state.solver.file(id)).map(|m| m.len()).unwrap_or(0));
+        }
+        // tables d'équité préflop tête-à-tête exactes (assets/hu_equity.bin)
+        Some("gen-tables") => {
+            let t0 = std::time::Instant::now();
+            let t = solver::preflop::classes::compute_hu(&|d, n| eprintln!("  {d} / {n} configurations"));
+            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/hu_equity.bin");
+            std::fs::write(&path, t.to_bytes()).expect("écriture");
+            println!("{} écrit en {:.0} s", path.display(), t0.elapsed().as_secs_f64());
+        }
+        // solution préflop en ligne de commande : spinop-cli preflop 12 12 12 [flops]
+        Some("preflop") if args.len() >= 3 => {
+            use solver::preflop::{run, tri::TriTables};
+            // spinop-cli preflop 12 12 12 [--flops 20]
+            let fi = args.iter().position(|x| x == "--flops");
+            let flops: usize = fi.and_then(|i| args.get(i + 1)).and_then(|x| x.parse().ok()).unwrap_or(0);
+            let stacks: Vec<f64> = args[1..fi.unwrap_or(args.len())].iter().filter_map(|x| x.parse().ok()).collect();
+            let t0 = std::time::Instant::now();
+            let tri = if stacks.len() == 3 {
+                Some(TriTables::load_or_build(&dir, &std::sync::atomic::AtomicBool::new(false), &|d, n| eprintln!("  tables à 3 : {d} / {n}")).expect("tables"))
+            } else {
+                None
+            };
+            eprintln!("tables prêtes en {:.0} s", t0.elapsed().as_secs_f64());
+            let req = run::PreflopRequest { config: solver::preflop::tree::PreflopConfig { stacks: stacks.clone(), ..Default::default() }, flops, ..Default::default() };
+            let cancel = std::sync::atomic::AtomicBool::new(false);
+            let sol = run::run(&req, tri.as_ref(), &cancel, &run::Progress { f: &|ph, fr, ex| eprintln!("  {:>5.1} % · {ph} · {}", fr * 100.0, ex.map(|e| format!("expl {e:.4} bb")).unwrap_or_default()) }).expect("solve");
+            let root = &sol.nodes[0];
+            let freq: Vec<String> = root
+                .actions
+                .iter()
+                .enumerate()
+                .map(|(a, act)| {
+                    let f: f64 = (0..169).map(|h| solver::preflop::classes::ncombos(h) * root.strategy[a * 169 + h] as f64).sum::<f64>() / 1326.0;
+                    format!("{} {:.1} %", act.label, f * 100.0)
+                })
+                .collect();
+            println!("{:?} · {} nœuds · {} it · {:.0} s · exploitabilité {:.4} bb/main · EV {:?}", stacks, sol.nodes.len(), sol.iterations, sol.seconds, sol.exploit, sol.evs.iter().map(|e| format!("{e:.3}")).collect::<Vec<_>>());
+            println!("{} : {}", sol.names[0], freq.join(" · "));
+        }
+        // équité à tapis : spinop-cli allin <top% pousseur BTN> <top% sur-call BB> <main>
+        Some("allin") if args.len() >= 4 => {
+            use solver::preflop::{allin, tri::TriTables};
+            let order = solver::ranges::preflop_order();
+            let top = |p: f64| {
+                let mut acc = 0.0;
+                let mut v = Vec::new();
+                for &c in order.iter() {
+                    let n = solver::preflop::classes::ncombos(c);
+                    if acc + n / 2.0 > 1326.0 * p / 100.0 {
+                        break;
+                    }
+                    v.push(solver::ranges::cell_name(c));
+                    acc += n;
+                }
+                v.join(",")
+            };
+            let tri = TriTables::load_or_build(&dir, &std::sync::atomic::AtomicBool::new(false), &|_, _| {}).expect("tables");
+            let req = allin::AllinRequest { stacks: vec![14.0, 14.0, 14.0], ante: 0.0, shover: 0, shove_range: top(args[1].parse().unwrap()), hero: 1, behind: Some(2), behind_range: top(args[2].parse().unwrap()) };
+            let r = allin::run(&req, Some(&tri)).expect("calcul");
+            println!("à payer {:.2} bb · pot {:.2} bb · équité nécessaire {:.1} % · call rentable {:.1} % des mains", r.to_call, r.pot_if_called, r.need * 100.0, r.call_pct * 100.0);
+            for name in args[3..].iter() {
+                let x = r.rows.iter().find(|x| &x.name == name).expect("main");
+                println!("{} : équité {:.1} % · BB paye {:.1} % · équité à 3 {:?} · CEV payer {:.2} · coucher {:.2}", x.name, x.equity * 100.0, x.behind_calls * 100.0, x.equity3.map(|e| (e * 1000.0).round() / 10.0), x.ev_call, x.ev_fold);
+            }
+        }
+        Some("lighten") if args.len() >= 3 => {
+            let id: i64 = args[1].parse().expect("id");
+            let (cfg_json, _) = state.db.lock().solve_config(id).expect("solve");
+            let before = std::fs::metadata(state.solver.file(id)).map(|m| m.len()).unwrap_or(0);
+            let after = state.solver.lighten(id, &cfg_json, args[2] == "turn").expect("allègement");
+            state.db.lock().solve_storage(id, &args[2], after).unwrap();
+            println!("{:.0} Mo -> {:.0} Mo", before as f64 / 1e6, after as f64 / 1e6);
+            *state.solver.open.lock() = None;
+            let v = state.solver.with_open(id, &cfg_json, |op| solver::postflop::node_view(&mut op.game, &[1, 1], &op.cfg, Some(&mut op.rivers)));
+            println!("après check-check (carte du turn) : {}", v.map(|v| format!("stored={}", v["stored"])).unwrap_or_else(|e| e));
+            let v = state.solver.with_open(id, &cfg_json, |op| solver::postflop::node_view(&mut op.game, &[0, 0, 20, 0, 0, 30], &op.cfg, Some(&mut op.rivers)));
+            println!("river re-résolue : {}", v.map(|v| format!("board {} · {}", v["board"], v["resolved_river"])).unwrap_or_else(|e| e));
+        }
         _ => {
             println!("Base : {}", dir.display());
-            println!("Usage :\n  spinop-cli import <fichier|dossier|zip>…\n  spinop-cli summary\n  spinop-cli kv <clé> <valeur>");
+            println!("Usage :\n  spinop-cli import <fichier|dossier|zip>…\n  spinop-cli summary\n  spinop-cli kv <clé> <valeur>
+  spinop-cli spots");
         }
     }
 }

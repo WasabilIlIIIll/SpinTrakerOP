@@ -41,6 +41,7 @@ const P: Record<string, string> = {
   zap: "M13 2 3 14h9l-1 8 10-12h-9z",
   info: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 16v-4M12 8h.01",
   download: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3",
+  power: "M12 2v10M18.4 6.6a9 9 0 1 1-12.8 0",
   menu: "M3 6h18M3 12h18M3 18h18",
   grip: "M9 5h.01M9 12h.01M9 19h.01M15 5h.01M15 12h.01M15 19h.01",
   refresh: "M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5",

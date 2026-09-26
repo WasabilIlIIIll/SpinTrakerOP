@@ -26,13 +26,15 @@ impl Db {
              CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
              CREATE TABLE IF NOT EXISTS challenges (id INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT NOT NULL);
              CREATE TABLE IF NOT EXISTS imports (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, sources INTEGER, hands INTEGER, imported INTEGER, duplicates INTEGER, invalid INTEGER, status TEXT, label TEXT DEFAULT '');
-             CREATE TABLE IF NOT EXISTS favorites (hand_id TEXT PRIMARY KEY, ts INTEGER, note TEXT NOT NULL DEFAULT '');",
+             CREATE TABLE IF NOT EXISTS favorites (hand_id TEXT PRIMARY KEY, ts INTEGER, note TEXT NOT NULL DEFAULT '');
+             CREATE TABLE IF NOT EXISTS solves (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, kind TEXT NOT NULL, hand_id TEXT, label TEXT NOT NULL DEFAULT '', config TEXT NOT NULL, status TEXT NOT NULL, exploit REAL, iters INTEGER DEFAULT 0, seconds REAL DEFAULT 0, bytes INTEGER DEFAULT 0, fav INTEGER DEFAULT 0, note TEXT NOT NULL DEFAULT '', deleted_at INTEGER);",
         )
         .map_err(|e| e.to_string())?;
         // migrations souples (colonnes ajoutées après coup)
         let _ = conn.execute("ALTER TABLE hands ADD COLUMN batch INTEGER DEFAULT 0", []);
         let _ = conn.execute("ALTER TABLE imports ADD COLUMN label TEXT DEFAULT ''", []);
         let _ = conn.execute("CREATE INDEX IF NOT EXISTS hands_batch ON hands(batch)", []);
+        let _ = conn.execute("ALTER TABLE solves ADD COLUMN storage TEXT NOT NULL DEFAULT 'river'", []);
         let db = Db { conn };
         db.repair_batches();
         Ok(db)
@@ -292,5 +294,90 @@ impl Db {
 
     pub fn wipe(&self) -> Result<(), String> {
         self.conn.execute_batch("DELETE FROM hands; DELETE FROM tournaments; DELETE FROM imports; DELETE FROM favorites; VACUUM;").map_err(|e| e.to_string())
+    }
+
+    // ------------------------------------------------------------ historique des solves
+
+    pub fn solve_insert(&self, ts: i64, kind: &str, hand_id: Option<&str>, label: &str, config: &str) -> Result<i64, String> {
+        self.conn
+            .execute("INSERT INTO solves (ts, kind, hand_id, label, config, status) VALUES (?1, ?2, ?3, ?4, ?5, 'running')", params![ts, kind, hand_id, label, config])
+            .map_err(|e| e.to_string())?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    pub fn solve_finish(&self, id: i64, status: &str, exploit: Option<f64>, iters: i64, seconds: f64, bytes: i64) -> Result<(), String> {
+        self.conn
+            .execute("UPDATE solves SET status = ?2, exploit = ?3, iters = ?4, seconds = ?5, bytes = ?6 WHERE id = ?1", params![id, status, exploit, iters, seconds, bytes])
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+
+    /// Solves restés « en cours » après un arrêt de l'application.
+    pub fn solve_mark_interrupted(&self) {
+        let _ = self.conn.execute("UPDATE solves SET status = 'interrompu' WHERE status = 'running'", []);
+    }
+
+    pub fn solve_config(&self, id: i64) -> Result<(String, String), String> {
+        self.conn
+            .query_row("SELECT config, status FROM solves WHERE id = ?1", params![id], |r| Ok((r.get(0)?, r.get(1)?)))
+            .map_err(|_| "solve introuvable".to_string())
+    }
+
+    pub fn solves(&self, trash: bool) -> Result<Vec<serde_json::Value>, String> {
+        let sql = format!(
+            "SELECT id, ts, kind, hand_id, label, config, status, exploit, iters, seconds, bytes, fav, note, deleted_at, storage FROM solves WHERE deleted_at IS {} NULL ORDER BY id DESC",
+            if trash { "NOT" } else { "" }
+        );
+        let mut st = self.conn.prepare(&sql).map_err(|e| e.to_string())?;
+        let rows = st
+            .query_map([], |r| {
+                let cfg: String = r.get(5)?;
+                Ok(serde_json::json!({
+                    "id": r.get::<_, i64>(0)?, "ts": r.get::<_, i64>(1)?, "kind": r.get::<_, String>(2)?,
+                    "hand_id": r.get::<_, Option<String>>(3)?, "label": r.get::<_, String>(4)?,
+                    "config": serde_json::from_str::<serde_json::Value>(&cfg).unwrap_or(serde_json::Value::Null),
+                    "status": r.get::<_, String>(6)?, "exploit": r.get::<_, Option<f64>>(7)?, "iters": r.get::<_, i64>(8)?,
+                    "seconds": r.get::<_, f64>(9)?, "bytes": r.get::<_, i64>(10)?, "fav": r.get::<_, i64>(11)? != 0,
+                    "note": r.get::<_, String>(12)?, "deleted_at": r.get::<_, Option<i64>>(13)?,
+                    "storage": r.get::<_, String>(14)?,
+                }))
+            })
+            .map_err(|e| e.to_string())?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(rows)
+    }
+
+    pub fn solve_update(&self, id: i64, fav: Option<bool>, note: Option<&str>, label: Option<&str>) -> Result<(), String> {
+        if let Some(f) = fav {
+            self.conn.execute("UPDATE solves SET fav = ?2 WHERE id = ?1", params![id, f as i64]).map_err(|e| e.to_string())?;
+        }
+        if let Some(n) = note {
+            self.conn.execute("UPDATE solves SET note = ?2 WHERE id = ?1", params![id, n]).map_err(|e| e.to_string())?;
+        }
+        if let Some(l) = label {
+            self.conn.execute("UPDATE solves SET label = ?2 WHERE id = ?1", params![id, l]).map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+
+    pub fn solve_storage(&self, id: i64, storage: &str, bytes: i64) -> Result<(), String> {
+        self.conn.execute("UPDATE solves SET storage = ?2, bytes = ?3 WHERE id = ?1", params![id, storage, bytes]).map(|_| ()).map_err(|e| e.to_string())
+    }
+
+    /// Corbeille : `ts` = date de suppression, `None` = restauration.
+    pub fn solve_trash(&self, id: i64, ts: Option<i64>) -> Result<(), String> {
+        self.conn.execute("UPDATE solves SET deleted_at = ?2 WHERE id = ?1", params![id, ts]).map(|_| ()).map_err(|e| e.to_string())
+    }
+
+    /// Suppression définitive des solves en corbeille ; renvoie leurs ids (fichiers à effacer).
+    pub fn solve_purge(&self) -> Result<Vec<i64>, String> {
+        let ids: Vec<i64> = self
+            .conn
+            .prepare("SELECT id FROM solves WHERE deleted_at IS NOT NULL")
+            .and_then(|mut st| st.query_map([], |r| r.get(0))?.collect())
+            .map_err(|e| e.to_string())?;
+        self.conn.execute("DELETE FROM solves WHERE deleted_at IS NOT NULL", []).map_err(|e| e.to_string())?;
+        Ok(ids)
     }
 }
