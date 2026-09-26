@@ -483,3 +483,53 @@ export function parseBook(json: string | null): RangeBook {
     return emptyBook();
   }
 }
+
+// ---------------------------------------------------------------- comparaison de ranges
+
+/** Dernière décision du joueur `p` dans l'historique (indice), ou -1 s'il n'a pas encore parlé. */
+export function lastDecision(fmt: Fmt, depth: number, sizes: TreeSizes, history: string[], p: number): number {
+  const r = replay(fmt, depth, sizes, history);
+  if (!r) return -1;
+  for (let k = history.length - 1; k >= 0; k--) if (r.states[k].toAct === p) return k;
+  return -1;
+}
+
+/** Range du joueur `p` au spot : mains qui atteignent sa dernière décision × fréquence de
+ * l'action qu'il y a choisie. Un joueur qui n'a pas encore parlé a toutes ses mains. */
+export function playerRange(book: DepthBook | undefined, fmt: Fmt, depth: number, sizes: TreeSizes, history: string[], p: number): number[] {
+  const k = lastDecision(fmt, depth, sizes, history, p);
+  if (k < 0) return Array(169).fill(1);
+  const r = replay(fmt, depth, sizes, history.slice(0, k + 1))!;
+  const s = r.states[k];
+  const sp: Spot = { key: nodeKey(s), state: s, acts: r.acts[k], hero: FORMATS[fmt].pos[p] };
+  const reach = heroReach(book, fmt, depth, sizes, history.slice(0, k));
+  const st = strategy(book, sp);
+  if (!st) return reach;
+  const i = sp.acts.findIndex((a) => a.id === history[k]);
+  return reach.map((w, c) => w * st[c][i]);
+}
+
+/** Nombre de combos du joueur `p` au spot : 1326 × produit des fréquences de ses actions.
+ * `exact` : toutes ces fréquences viennent du solveur (fichier importé) et non d'un calcul
+ * sur les actions dominantes. */
+export function playerCombos(book: DepthBook | undefined, fmt: Fmt, depth: number, sizes: TreeSizes, history: string[], p: number): { combos: number; exact: boolean } {
+  const r = replay(fmt, depth, sizes, history);
+  if (!r) return { combos: 0, exact: false };
+  let f = 1;
+  let exact = true;
+  for (let k = 0; k < history.length; k++) {
+    const s = r.states[k];
+    if (s.toAct !== p) continue;
+    const key = history.slice(0, k).join("-");
+    const given = book?.freq?.[key]?.[history[k]];
+    if (given !== undefined) f *= given;
+    else {
+      exact = false;
+      const sp: Spot = { key, state: s, acts: r.acts[k], hero: FORMATS[fmt].pos[p] };
+      const st = strategy(book, sp);
+      const i = sp.acts.findIndex((a) => a.id === history[k]);
+      if (st) f *= actionTotals(st, heroReach(book, fmt, depth, sizes, history.slice(0, k))).freq[i];
+    }
+  }
+  return { combos: 1326 * f, exact };
+}

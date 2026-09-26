@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "../lib/state";
 import { Btn, Help, Panel } from "./ui";
 import { HandGrid } from "./HandGrid";
+import { TrainerStats } from "./TrainerStats";
 import { cls, num } from "../lib/format";
 import {
   FORMATS,
@@ -50,7 +51,7 @@ interface Cfg {
 
 const DEFAULT_CFG: Cfg = { fmt: "spin3", depths: [], tables: 1, positions: [], off: [], threshold: 0.1, showMs: 5000, waitClick: false, fewerTrivial: true, realistic: true };
 
-interface PoolSpot {
+export interface PoolSpot {
   id: string;
   depth: number;
   spot: Spot;
@@ -70,10 +71,12 @@ interface Deal {
   result?: { choice: number; ok: boolean; freq: number; best: number };
 }
 
-interface Progress {
+export interface Progress {
   version: 1;
   spots: Record<string, { n: number; ok: number; last: number }>;
   days: Record<string, { n: number; ok: number }>;
+  /** détail par jour et par spot : [mains, justes] (courbe filtrable par catégorie) */
+  daySpots?: Record<string, Record<string, [number, number]>>;
 }
 
 const spotId = (fmt: Fmt, depth: number, key: string) => `${fmt}|${depth}|${key}`;
@@ -120,6 +123,9 @@ function lineProb(db: DepthBook, fmt: Fmt, depth: number, history: string[]): nu
   return p;
 }
 
+/** Date du jour à l'heure de l'ordinateur (AAAA-MM-JJ). */
+export const localDay = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
 let dealNo = 0;
 
 function pickSpot(pool: PoolSpot[], realistic: boolean): PoolSpot {
@@ -158,6 +164,8 @@ export function Trainer({ book }: { book: RangeBook }) {
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<Progress>({ version: 1, spots: {}, days: {} });
   const [last, setLast] = useState<{ n: number; ok: number } | null>(null);
+  /** session ciblée (faiblesses ou catégorie) lancée depuis le suivi */
+  const [custom, setCustom] = useState<{ pool: PoolSpot[]; label: string } | null>(null);
   useEffect(() => {
     rangesApi
       .trainerLoad()
@@ -170,16 +178,21 @@ export function Trainer({ book }: { book: RangeBook }) {
   const useDepths = depths.length ? depths : depthsWith;
   const pool = useMemo(() => buildPool(book, cfg.fmt, useDepths, cfg.positions, cfg.off), [book, cfg.fmt, useDepths.join(","), cfg.positions.join(","), cfg.off.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
   const allSpots = useMemo(() => buildPool(book, cfg.fmt, useDepths, cfg.positions, []), [book, cfg.fmt, useDepths.join(","), cfg.positions.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+  // tous les spots du format (toutes profondeurs et positions) : base du suivi
+  const index = useMemo(() => new Map(buildPool(book, cfg.fmt, depthsWith, [], []).map((p) => [p.id, p])), [book, cfg.fmt, depthsWith.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (running && pool.length)
+  const sessionPool = custom?.pool.length ? custom.pool : pool;
+  if (running && sessionPool.length)
     return (
       <Session
-        pool={pool}
+        pool={sessionPool}
+        label={custom?.label}
         cfg={cfg}
         progress={progress}
         setProgress={setProgress}
         onStop={(s) => {
           setRunning(false);
+          setCustom(null);
           setLast(s);
         }}
       />
@@ -187,15 +200,9 @@ export function Trainer({ book }: { book: RangeBook }) {
 
   const pos = FORMATS[cfg.fmt].pos;
   const toggle = <T,>(arr: T[], v: T) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
-  const tot = Object.values(progress.spots).reduce((a, x) => ({ n: a.n + x.n, ok: a.ok + x.ok }), { n: 0, ok: 0 });
-  const today = progress.days[new Date().toISOString().slice(0, 10)];
-  const weak = Object.entries(progress.spots)
-    .filter(([id, x]) => x.n >= 5 && id.startsWith(cfg.fmt + "|"))
-    .map(([id, x]) => ({ id, ...x, pct: x.ok / x.n, label: allSpots.find((p) => p.id === id)?.label ?? id.split("|").slice(1).join(" · ") }))
-    .sort((a, b) => a.pct - b.pct)
-    .slice(0, 8);
 
   return (
+    <div className="col gap16">
     <div className="grid2 tr-setup">
       <Panel title="Nouvelle session">
         <div className="col gap16">
@@ -294,38 +301,6 @@ export function Trainer({ book }: { book: RangeBook }) {
         </div>
       </Panel>
       <div className="col gap16">
-        <Panel title="Progression" help="Enregistrée sur ton PC (trainer.json, à côté de la base).">
-          <div className="row gap24 wrap">
-            <div className="tr-kpi">
-              <span>Total</span>
-              <b>{tot.n ? `${num((tot.ok / tot.n) * 100, 0)} %` : "–"}</b>
-              <small>{num(tot.n)} mains</small>
-            </div>
-            <div className="tr-kpi">
-              <span>Aujourd'hui</span>
-              <b>{today?.n ? `${num((today.ok / today.n) * 100, 0)} %` : "–"}</b>
-              <small>{num(today?.n ?? 0)} mains</small>
-            </div>
-          </div>
-          {weak.length > 0 && (
-            <>
-              <div className="muted small" style={{ margin: "12px 0 6px" }}>
-                Spots les plus difficiles (5 mains minimum)
-              </div>
-              <table className="tbl">
-                <tbody>
-                  {weak.map((w) => (
-                    <tr key={w.id}>
-                      <td>{w.label}</td>
-                      <td className="r muted">{w.n}</td>
-                      <td className={cls("r", w.pct >= 0.8 ? "pos" : "neg")}>{num(w.pct * 100, 0)} %</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </>
-          )}
-        </Panel>
         <Panel title={`Spots (${pool.length}/${allSpots.length})`} help="Décoche les spots à exclure de l'entraînement.">
           {allSpots.length === 0 ? (
             <div className="muted small">Aucun spot renseigné pour cette sélection.</div>
@@ -341,6 +316,16 @@ export function Trainer({ book }: { book: RangeBook }) {
           )}
         </Panel>
       </div>
+    </div>
+      <TrainerStats
+        index={index}
+        progress={progress}
+        onTrain={(spots, label) => {
+          if (!spots.length) return;
+          setCustom({ pool: spots, label });
+          setRunning(true);
+        }}
+      />
     </div>
   );
 }
@@ -482,12 +467,14 @@ function fit(n: number, W: number, H: number, gap = 10): { cols: number; w: numb
 
 function Session({
   pool,
+  label,
   cfg,
   progress,
   setProgress,
   onStop,
 }: {
   pool: PoolSpot[];
+  label?: string;
   cfg: Cfg;
   progress: Progress;
   setProgress: (p: Progress) => void;
@@ -551,13 +538,21 @@ function Session({
     });
     // progression
     const p = prog.current;
-    const day = new Date().toISOString().slice(0, 10);
+    const day = localDay();
     const sp = p.spots[d.ps.id] ?? { n: 0, ok: 0, last: 0 };
     const dy = p.days[day] ?? { n: 0, ok: 0 };
     prog.current = {
       ...p,
       spots: { ...p.spots, [d.ps.id]: { n: sp.n + 1, ok: sp.ok + (ok ? 1 : 0), last: Math.floor(Date.now() / 1000) } },
       days: { ...p.days, [day]: { n: dy.n + 1, ok: dy.ok + (ok ? 1 : 0) } },
+      daySpots: (() => {
+        const ds = { ...(p.daySpots ?? {}) };
+        const today = { ...(ds[day] ?? {}) };
+        const [n0, ok0] = today[d.ps.id] ?? [0, 0];
+        today[d.ps.id] = [n0 + 1, ok0 + (ok ? 1 : 0)];
+        ds[day] = today;
+        return ds;
+      })(),
     };
     setProgress(prog.current);
     window.clearTimeout(saveT.current);
@@ -641,6 +636,13 @@ function Session({
           <b>{score.streak}</b>
           <small>record {score.best}</small>
         </div>
+        {label && (
+          <div className="tr-kpi">
+            <span>Entraînement ciblé</span>
+            <b className="tr-target">{label}</b>
+            <small>{pool.length} spots</small>
+          </div>
+        )}
         <div className="tr-keys">
           {(Object.keys(KEY_LABELS) as KeyAction[])
             .filter((k) => keys[k])

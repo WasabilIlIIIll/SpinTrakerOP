@@ -38,6 +38,10 @@ export interface UiPrefs {
   eventsLayout: "vedette" | "compact" | "liste";
   rangesFmt?: "spin3" | "hu";
   rangesDepth?: number;
+  /** vue « Comparer » des ranges, et largeur de la zone des grilles (% de la page) */
+  rangesCompare?: boolean;
+  rangesSplit?: number;
+  rangesSplitCmp?: number;
   /** réglages du trainer (voir components/Trainer.tsx) */
   trainer?: Record<string, unknown>;
 }

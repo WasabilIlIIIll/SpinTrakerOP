@@ -22,6 +22,9 @@ import {
   implicitIndex,
   isDefined,
   mapHistory,
+  lastDecision,
+  playerCombos,
+  playerRange,
   nodeKey,
   parseBook,
   rangesApi,
@@ -144,6 +147,34 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
   const [weight, setWeight] = useState(1);
   const [sizesOpen, setSizesOpen] = useState(false);
   const [paste, setPaste] = useState<number | null>(null);
+  const compare = !!prefs.rangesCompare && !edit;
+  const [vsPick, setVsPick] = useState<number | null>(null);
+  // largeur de la zone des grilles, retenue séparément en vue simple et en comparaison
+  const savedSplit = compare ? prefs.rangesSplitCmp ?? 64 : prefs.rangesSplit ?? 46;
+  const [split, setSplit] = useState<number>(savedSplit);
+  useEffect(() => setSplit(savedSplit), [compare]); // eslint-disable-line react-hooks/exhaustive-deps
+  const body = useRef<HTMLDivElement>(null);
+  // poignée entre la grille et le panneau de droite : la grille garde des cases carrées
+  const startSplit = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const el = body.current;
+    if (!el) return;
+    let last = split;
+    const move = (ev: MouseEvent) => {
+      const r = el.getBoundingClientRect();
+      last = Math.max(30, Math.min(80, ((ev.clientX - r.left) / r.width) * 100));
+      setSplit(last);
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      document.body.classList.remove("resizing");
+      setPrefs(compare ? { rangesSplitCmp: Math.round(last * 10) / 10 } : { rangesSplit: Math.round(last * 10) / 10 });
+    };
+    document.body.classList.add("resizing");
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  };
   const db = findBook(book, fmt, depth);
   const sizes: TreeSizes = db?.sizes ?? defaultSizes(fmt);
   const pos = FORMATS[fmt].pos;
@@ -171,6 +202,29 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
   const fileFreq = spot ? db?.freq?.[spot.key] : undefined;
   const totals = computed && fileFreq ? { ...computed, freq: acts.map((a) => fileFreq[a.id] ?? 0) } : computed;
   const shown = hover ?? cell;
+
+  // comparaison : range d'un adversaire au même spot (par défaut le dernier à avoir relancé,
+  // sinon le dernier à avoir parlé sans se coucher, sinon le prochain à parler)
+  const others = spot ? pos.map((_, i) => i).filter((i) => i !== cur.toAct && !cur.folded[i]) : [];
+  const defaultVs = (() => {
+    if (!spot) return -1;
+    let best = -1;
+    let bestAggr = -1;
+    history.forEach((id, k) => {
+      const who = r.states[k].toAct;
+      if (who === cur.toAct || cur.folded[who]) return;
+      best = who;
+      if (id.startsWith("R") || id === "AI") bestAggr = who;
+    });
+    return bestAggr >= 0 ? bestAggr : best >= 0 ? best : others[0] ?? -1;
+  })();
+  const vs = vsPick != null && others.includes(vsPick) ? vsPick : defaultVs;
+  const vsRange = useMemo(() => (compare && vs >= 0 ? playerRange(db, fmt, depth, sizes, history, vs) : null), [compare, vs, db, fmt, depth, sizes, history]);
+  const vsK = compare && vs >= 0 ? lastDecision(fmt, depth, sizes, history, vs) : -1;
+  const vsAct = vsK >= 0 ? r.acts[vsK].find((a) => a.id === history[vsK]) : undefined;
+  const vsColor = vsK >= 0 ? actColors(r.acts[vsK])[r.acts[vsK].findIndex((a) => a.id === history[vsK])] : "#58b6ff";
+  const vsCombos = compare && vs >= 0 ? playerCombos(db, fmt, depth, sizes, history, vs) : null;
+  const heroCombos = compare && spot ? playerCombos(db, fmt, depth, sizes, history, cur.toAct) : null;
   useEffect(() => setBrush(Math.min(brush, Math.max(0, acts.length - 1))), [acts.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const depthsOf = (f: Fmt) => [...new Set([...DEPTHS, ...book.books.filter((b) => b.fmt === f).map((b) => b.depth)])].sort((a, b) => b - a);
@@ -323,11 +377,14 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
       </div>
 
       {spot && (
-        <div className="gw-body">
+        <div className="gw-body" ref={body} style={{ ["--split" as string]: `${split}%` }}>
           <div className="gw-panel gw-left">
             <div className="gw-tabs">
-              <button className={cls(!edit && "on")} onClick={() => setEdit(false)}>
+              <button className={cls(!edit && !compare && "on")} onClick={() => (setEdit(false), setPrefs({ rangesCompare: false }))}>
                 Stratégie
+              </button>
+              <button className={cls(compare && "on")} onClick={() => (setEdit(false), setPrefs({ rangesCompare: true }))} title="La range d'un adversaire à côté de ta stratégie">
+                ⇄ Comparer
               </button>
               <button className={cls(edit && "on")} onClick={() => setEdit(true)}>
                 ✎ Modifier
@@ -371,7 +428,73 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
                 <Help text="Choisis une action et un poids puis peins la grille (clic ou glisser). L'action choisie reçoit le poids, les autres se partagent le reste. « Coller » accepte le format texte standard : AA,AKs:0.5,22+,A2s+,KTo-K8o. Tout est enregistré automatiquement." />
               </div>
             )}
-            <div className="gw-gridwrap">
+            {compare && (
+              <div className="gw-compare">
+                <div className="gw-cmp-col">
+                  <div className="gw-cmp-h">
+                    <div className="gw-seg">
+                      {others.map((i) => (
+                        <button key={i} className={cls(vs === i && "on")} onClick={() => setVsPick(i)}>
+                          {pos[i]}
+                        </button>
+                      ))}
+                    </div>
+                    <span className="gw-mut">{vsAct ? vsAct.label : "n'a pas encore parlé"}</span>
+                    <div className="grow" />
+                    {vsCombos && (
+                      <b title={vsCombos.exact ? "1326 × fréquences du solveur de ses actions" : "calculé sur les ranges (action dominante de chaque main)"}>
+                        {vsCombos.exact ? "≈ " : "~ "}
+                        {num(vsCombos.combos, 1)} combos
+                      </b>
+                    )}
+                  </div>
+                  <div className="gw-gridwrap">
+                    <HandGrid
+                      selected={cell}
+                      onCell={(c) => setCell(cell === c ? null : c)}
+                      onHover={setHover}
+                      dim={(c) => (vsRange?.[c] ?? 0) <= 0.001}
+                      render={(c) => {
+                        const w = vsRange?.[c] ?? 0;
+                        return w > 0.001 ? <div className="hg-fill" style={{ height: `${w * 100}%`, background: vsColor }} /> : null;
+                      }}
+                    />
+                  </div>
+                </div>
+                <div className="gw-cmp-col">
+                  <div className="gw-cmp-h">
+                    <b>{spot.hero}</b>
+                    <span className="gw-mut">stratégie</span>
+                    <div className="grow" />
+                    {heroCombos && (
+                      <b>
+                        {heroCombos.exact ? "≈ " : "~ "}
+                        {num(heroCombos.combos, 1)} combos
+                      </b>
+                    )}
+                  </div>
+                  <div className="gw-gridwrap">
+                    <HandGrid
+                      selected={cell}
+                      onCell={(c) => setCell(cell === c ? null : c)}
+                      onHover={setHover}
+                      dim={(c) => reach[c] <= 0.001}
+                      render={(c) => {
+                        if (!defined) return null;
+                        const w = reach[c];
+                        if (w <= 0.001) return null;
+                        return (
+                          <div className="hg-strat" style={{ height: `${Math.max(6, w * 100)}%` }}>
+                            {view[c].map((f, i) => (f > 0.002 ? <i key={i} style={{ width: `${f * 100}%`, background: colors[i] }} /> : null))}
+                          </div>
+                        );
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className="gw-gridwrap" style={compare ? { display: "none" } : undefined}>
               <HandGrid
                 selected={cell}
                 onCell={edit ? undefined : (c) => setCell(cell === c ? null : c)}
@@ -398,6 +521,12 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
             {shown != null && (
               <div className="gw-cellinfo">
                 <b>{cellName(shown)}</b> · {cellCombos(shown)} combos · atteinte {num(reach[shown] * 100, 0)} %
+                {compare && vs >= 0 && vsRange && (
+                  <span className="gw-mut">
+                    {" "}
+                    · {pos[vs]} {vsAct ? vsAct.label : ""} : {vsRange[shown] > 0.001 ? `${num(vsRange[shown] * 100, 0)} %` : "hors range"}
+                  </span>
+                )}
                 <div className="gw-sbar wide">
                   {view[shown].map((f, i) => (f > 0.002 ? <i key={i} style={{ width: `${f * 100}%`, background: colors[i] }} /> : null))}
                 </div>
@@ -412,6 +541,7 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
               </div>
             )}
           </div>
+          <div className="gw-split" onMouseDown={startSplit} title="Glisser pour agrandir ou réduire la grille" />
           <div className="gw-right">
             <div className="gw-boxes">
               {acts.map((a, i) => (
