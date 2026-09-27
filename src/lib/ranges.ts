@@ -30,7 +30,12 @@ export interface TreeSizes {
   maxRaises: number;
   /** arbre importé : actions de chaque spot (prioritaires sur les tailles ci-dessus) */
   explicit?: Record<string, string[]>;
+  /** ante payée par chaque joueur (bb), argent mort dans le pot, hors tapis */
+  ante?: number;
 }
+
+/** Pot d'un état : mises + antes. */
+export const potOf = (s: State, sizes?: TreeSizes) => s.put.reduce((a, b) => a + b, 0) + (sizes?.ante ?? 0) * s.put.length;
 
 export function defaultSizes(fmt: Fmt): TreeSizes {
   return fmt === "spin3"
@@ -238,6 +243,8 @@ export interface DepthBook {
   mixed?: boolean;
   /** fréquences globales de chaque action d'après le fichier importé (0-1) */
   freq?: Record<string, Record<string, number>>;
+  /** EV en bb par spot et par main : [EV de la main, EV de chaque action dans l'ordre du spot] */
+  ev?: Record<string, Record<string, number[]>>;
   /** clé de spot -> action -> range texte */
   nodes: Record<string, Record<string, string>>;
   updated: number;
@@ -428,9 +435,10 @@ export function mapHistory(fmt: Fmt, depth: number, sizes: TreeSizes, h: string[
  *   de la main dans la range).
  * L'arbre du fichier devient l'arbre du livre. */
 export function fromSimpleExport(j: unknown): RangeBook | null {
-  type Hand = { freq?: Record<string, number>; reach?: number };
+  type Hand = { freq?: Record<string, number>; reach?: number; ev?: number; ev_by_action?: Record<string, number> };
   type Node = {
     hero: string;
+    pot?: number;
     actions: Record<string, unknown> | string[];
     action_frequencies?: Record<string, number>;
     hand_action?: Record<string, string>;
@@ -452,7 +460,12 @@ export function fromSimpleExport(j: unknown): RangeBook | null {
     const out: Record<string, Record<string, string>> = {};
     const reach: Record<string, string> = {};
     const freq: Record<string, Record<string, number>> = {};
+    const ev: Record<string, Record<string, number[]>> = {};
     let mixed = false;
+    // ante : pot de départ au-delà des blindes (0,5 + 1), réparti entre les joueurs
+    const n0 = fmt === "spin3" ? 3 : 2;
+    const ante = Math.max(0, r4(((nodes.ROOT?.pot ?? 1.5) - 1.5) / n0));
+    const r3 = (x: number) => Math.round(x * 1000) / 1000;
     for (const [k, n] of Object.entries(nodes)) {
       const key = keyOf(k);
       const acts = explicit[key];
@@ -467,8 +480,10 @@ export function fromSimpleExport(j: unknown): RangeBook | null {
         mixed = true;
         const lists: Record<string, string[]> = {};
         const rch: string[] = [];
+        const raw = Array.isArray(n.actions) ? n.actions : Object.keys(n.actions ?? {});
         for (const [hand, h] of Object.entries(n.hands)) {
           rch.push(`${hand}:${Math.max(0.0015, r4(Math.min(1, h.reach ?? 1)))}`);
+          if (typeof h.ev === "number") (ev[key] ??= {})[hand] = [r3(h.ev), ...raw.map((id) => r3(h.ev_by_action?.[id] ?? NaN))];
           // pourcentages arrondis à l'entier dans le fichier (total 99 à 101) : ramenés à 100 %
           const sum = Object.values(h.freq ?? {}).reduce((x, f) => x + (Number(f) || 0), 0) || 100;
           for (const [id0, f] of Object.entries(h.freq ?? {})) {
@@ -492,12 +507,13 @@ export function fromSimpleExport(j: unknown): RangeBook | null {
     books.push({
       fmt,
       depth,
-      sizes: { ...defaultSizes(fmt), explicit },
+      sizes: { ...defaultSizes(fmt), explicit, ...(ante > 0 ? { ante } : {}) },
       source: [meta.source?.trim().replace(/^-\s*/, ""), mixed ? "fréquences exactes par main" : meta.note].filter(Boolean).join(" · "),
       mixed,
       nodes: out,
       reach,
       freq,
+      ...(Object.keys(ev).length ? { ev } : {}),
       updated: Math.floor(Date.now() / 1000),
     });
   }

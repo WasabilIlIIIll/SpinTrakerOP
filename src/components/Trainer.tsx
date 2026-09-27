@@ -5,9 +5,12 @@ import { useApp } from "../lib/state";
 import { Btn, Help, Panel } from "./ui";
 import { HandGrid } from "./HandGrid";
 import { TrainerStats } from "./TrainerStats";
-import { cls, num } from "../lib/format";
+import { ReviewModal } from "./ReviewModal";
+import { analyze, linesApi, pendingReview, type Analysis, type Decision, type ReviewEntry } from "../lib/review";
+import { cls, num, realDate } from "../lib/format";
 import {
   FORMATS,
+  potOf,
   actColors,
   actionTotals,
   cellName,
@@ -59,6 +62,8 @@ export interface PoolSpot {
   strat: number[][];
   reach: number[];
   sizes: TreeSizes;
+  /** EV par main du spot, si le fichier la donne */
+  ev?: Record<string, number[]>;
   /** probabilité que le coup arrive jusqu'à ce spot (produit des fréquences des actions) */
   prob: number;
 }
@@ -68,7 +73,17 @@ interface Deal {
   ps: PoolSpot;
   cell: number;
   cards: [string, string];
+  /** main réelle rejouée en review */
+  note?: string;
   result?: { choice: number; ok: boolean; freq: number; best: number };
+}
+
+/** Main réelle à rejouer (review des erreurs). */
+interface QItem {
+  ps: PoolSpot;
+  cell: number;
+  cards: [string, string];
+  note: string;
 }
 
 export interface Progress {
@@ -77,6 +92,8 @@ export interface Progress {
   days: Record<string, { n: number; ok: number }>;
   /** détail par jour et par spot : [mains, justes] (courbe filtrable par catégorie) */
   daySpots?: Record<string, Record<string, [number, number]>>;
+  /** analyses des mains jouées (import ou base entière), les plus récentes d'abord */
+  reviews?: ReviewEntry[];
 }
 
 const spotId = (fmt: Fmt, depth: number, key: string) => `${fmt}|${depth}|${key}`;
@@ -95,7 +112,7 @@ function buildPool(book: RangeBook, fmt: Fmt, depths: number[], positions: strin
       if (!strat) continue;
       // spot qu'aucune main n'atteint (ligne jamais jouée) : rien à entraîner
       if (!heroReach(db, fmt, depth, db.sizes, sp.state.history).some((w) => w > 0)) continue;
-      out.push({ id, depth, prob: lineProb(db, fmt, depth, sp.state.history), spot: sp, label: `${fmtBB(depth)} bb · ${spotLabel(sp, db.sizes)}`, strat, reach: heroReach(db, fmt, depth, db.sizes, sp.state.history), sizes: db.sizes });
+      out.push({ id, depth, prob: lineProb(db, fmt, depth, sp.state.history), spot: sp, label: `${fmtBB(depth)} bb · ${spotLabel(sp, db.sizes)}`, strat, reach: heroReach(db, fmt, depth, db.sizes, sp.state.history), sizes: db.sizes, ev: db.ev?.[sp.key] });
     }
   }
   return out;
@@ -166,6 +183,62 @@ export function Trainer({ book }: { book: RangeBook }) {
   const [last, setLast] = useState<{ n: number; ok: number } | null>(null);
   /** session ciblée (faiblesses ou catégorie) lancée depuis le suivi */
   const [custom, setCustom] = useState<{ pool: PoolSpot[]; label: string } | null>(null);
+  /** review : erreurs réelles rejouées une par une, sur une table */
+  const [review, setReview] = useState<{ queue: QItem[]; label: string } | null>(null);
+  const [analysis, setAnalysis] = useState<Analysis | null>(null);
+  const [analysing, setAnalysing] = useState(false);
+  const { toast } = useApp();
+  const startReview = (items: Decision[], label: string) => {
+    const cache = new Map<string, Map<string, PoolSpot>>();
+    const queue: QItem[] = [];
+    for (const d of items) {
+      const k = `${d.fmt}|${d.depth}`;
+      if (!cache.has(k)) cache.set(k, new Map(buildPool(book, d.fmt, [d.depth], [], []).map((p) => [p.id, p])));
+      const ps = cache.get(k)!.get(`${d.fmt}|${d.depth}|${d.key}`);
+      if (!ps) continue;
+      queue.push({
+        ps,
+        cell: d.cell,
+        cards: d.cards,
+        note: `Main réelle du ${realDate(d.ts)} · tapis effectif ${fmtBB(d.eff)} bb · tu avais joué ${d.choiceLabel}`,
+      });
+    }
+    if (!queue.length) return toast("Ces spots n'existent plus dans tes ranges", "err");
+    setReview({ queue, label });
+    setRunning(true);
+  };
+  // erreurs transmises par l'import
+  useEffect(() => {
+    if (pendingReview.items?.length) {
+      const items = pendingReview.items;
+      pendingReview.items = null;
+      startReview(items, pendingReview.label || "Review");
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const analyseAll = async () => {
+    setAnalysing(true);
+    try {
+      const a = analyze(await linesApi.get(), book, cfg.threshold);
+      setAnalysis(a);
+      if (a.decisions.length) {
+        const entry: ReviewEntry = {
+          ts: Math.floor(Date.now() / 1000),
+          label: "Toute la base",
+          decisions: a.decisions.length,
+          ok: a.decisions.filter((d) => d.ok).length,
+          evLoss: a.decisions.reduce((x, d) => x + (d.evLoss ?? 0), 0),
+          errors: a.decisions.filter((d) => !d.ok),
+        };
+        const next = { ...progress, reviews: [entry, ...(progress.reviews ?? [])].slice(0, 20) };
+        setProgress(next);
+        rangesApi.trainerSave(JSON.stringify(next)).catch(() => {});
+      }
+    } catch (e) {
+      toast(String(e), "err");
+    } finally {
+      setAnalysing(false);
+    }
+  };
   useEffect(() => {
     rangesApi
       .trainerLoad()
@@ -181,18 +254,20 @@ export function Trainer({ book }: { book: RangeBook }) {
   // tous les spots du format (toutes profondeurs et positions) : base du suivi
   const index = useMemo(() => new Map(buildPool(book, cfg.fmt, depthsWith, [], []).map((p) => [p.id, p])), [book, cfg.fmt, depthsWith.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const sessionPool = custom?.pool.length ? custom.pool : pool;
+  const sessionPool = review ? review.queue.map((q) => q.ps) : custom?.pool.length ? custom.pool : pool;
   if (running && sessionPool.length)
     return (
       <Session
         pool={sessionPool}
-        label={custom?.label}
-        cfg={cfg}
+        label={review?.label ?? custom?.label}
+        queue={review?.queue}
+        cfg={review ? { ...cfg, tables: 1 } : cfg}
         progress={progress}
         setProgress={setProgress}
         onStop={(s) => {
           setRunning(false);
           setCustom(null);
+          setReview(null);
           setLast(s);
         }}
       />
@@ -317,6 +392,62 @@ export function Trainer({ book }: { book: RangeBook }) {
         </Panel>
       </div>
     </div>
+      <Panel
+        title="Tes décisions en jeu"
+        help="Tes mains réelles comparées à tes ranges, décision par décision, à la profondeur de range la plus proche du tapis effectif. Chaque import est analysé automatiquement ; tu peux aussi analyser toute ta base."
+        right={
+          <Btn icon="search" onClick={analyseAll} disabled={analysing}>
+            {analysing ? "Analyse…" : "Analyser toute ma base"}
+          </Btn>
+        }
+      >
+        {!(progress.reviews ?? []).length ? (
+          <div className="muted small">Aucune analyse pour l'instant : importe tes mains, ou analyse toute ta base.</div>
+        ) : (
+          <table className="tbl hover">
+            <thead>
+              <tr>
+                <th>Analyse</th>
+                <th className="r">Décisions</th>
+                <th className="r">Précision</th>
+                <th className="r">Erreurs</th>
+                <th className="r">EV perdue (HU)</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {(progress.reviews ?? []).map((r, i) => (
+                <tr key={i}>
+                  <td>
+                    {r.label} <span className="muted small">· {realDate(r.ts)}</span>
+                  </td>
+                  <td className="r">{num(r.decisions)}</td>
+                  <td className={cls("r", r.ok / r.decisions >= 0.85 ? "pos" : "neg")}>{num((r.ok / Math.max(1, r.decisions)) * 100, 0)} %</td>
+                  <td className="r">{num(r.errors.length)}</td>
+                  <td className="r">{r.evLoss > 0 ? `${num(r.evLoss, 2)} bb` : "–"}</td>
+                  <td className="r">
+                    <button className="fchip" disabled={!r.errors.length} onClick={() => startReview(r.errors, `Review : ${r.label}`)}>
+                      Rejouer les erreurs
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Panel>
+      {analysis && (
+        <ReviewModal
+          a={analysis}
+          book={book}
+          title="Tes décisions préflop sur toute ta base"
+          onClose={() => setAnalysis(null)}
+          onReplay={(errors) => {
+            setAnalysis(null);
+            startReview(errors, "Review : toute la base");
+          }}
+        />
+      )}
       <TrainerStats
         index={index}
         progress={progress}
@@ -468,6 +599,7 @@ function fit(n: number, W: number, H: number, gap = 10): { cols: number; w: numb
 function Session({
   pool,
   label,
+  queue,
   cfg,
   progress,
   setProgress,
@@ -475,12 +607,20 @@ function Session({
 }: {
   pool: PoolSpot[];
   label?: string;
+  queue?: QItem[];
   cfg: Cfg;
   progress: Progress;
   setProgress: (p: Progress) => void;
   onStop: (s: { n: number; ok: number }) => void;
 }) {
-  const [deals, setDeals] = useState<(Deal | null)[]>(() => Array.from({ length: cfg.tables }, () => newDeal(pool, cfg.fewerTrivial, cfg.realistic)));
+  const qi = useRef(0);
+  const fromQueue = (): Deal | null => {
+    const q = queue?.[qi.current++];
+    return q ? { n: ++dealNo, ps: q.ps, cell: q.cell, cards: q.cards, note: q.note } : null;
+  };
+  const [deals, setDeals] = useState<(Deal | null)[]>(() =>
+    queue ? [fromQueue()] : Array.from({ length: cfg.tables }, () => newDeal(pool, cfg.fewerTrivial, cfg.realistic)),
+  );
   const [score, setScore] = useState({ n: 0, ok: 0, streak: 0, best: 0 });
   const prog = useRef(progress);
   const saveT = useRef<number | undefined>(undefined);
@@ -522,7 +662,11 @@ function Session({
     [],
   );
 
-  const next = (t: number) => setDeals((ds) => ds.map((d, i) => (i === t ? newDeal(pool, cfg.fewerTrivial, cfg.realistic) : d)));
+  const next = (t: number) => {
+    const nd = queue ? fromQueue() : null;
+    setDeals((ds) => ds.map((d, i) => (i === t ? (queue ? nd : newDeal(pool, cfg.fewerTrivial, cfg.realistic)) : d)));
+  };
+  const reviewDone = !!queue && deals.every((d) => d == null);
 
   const answer = (t: number, choice: number) => {
     const d = dealsRef.current[t];
@@ -657,7 +801,18 @@ function Session({
           Terminer
         </Btn>
       </div>
-      <div ref={area} className="tr-area" style={{ height: box.h }}>
+      {reviewDone && (
+        <div className="tr-done">
+          <b>Review terminée</b>
+          <span>
+            {num(score.ok)} bonne{score.ok > 1 ? "s" : ""} réponse{score.ok > 1 ? "s" : ""} sur {num(score.n)} · {score.n ? `${num((score.ok / score.n) * 100, 0)} %` : ""}
+          </span>
+          <Btn kind="primary" onClick={() => onStop({ n: score.n, ok: score.ok })}>
+            Terminer
+          </Btn>
+        </div>
+      )}
+      <div ref={area} className="tr-area" style={{ height: reviewDone ? 0 : box.h }}>
         <div className="tr-tables" style={{ gridTemplateColumns: `repeat(${cols}, ${w}px)` }}>
           {deals.map((d, t) => (
             <div key={t} data-table={t} onMouseEnter={() => (hovered.current = t)}>
@@ -785,7 +940,16 @@ function Table({ deal, cfg, width, height, onAnswer, onNext }: { deal: Deal; cfg
       const who = r.states[k].toAct;
       lastAct[who] = r.acts[k].find((a) => a.id === id)?.label ?? id;
     });
-  const pot = sp.state.put.reduce((a, b) => a + b, 0);
+  const pot = potOf(sp.state, ps.sizes);
+  // EV de la main (ranges qui la donnent) et EV perdue par l'action choisie
+  const handEv = ps.ev?.[cellName(cell)];
+  const evLost = (() => {
+    if (!handEv || !result) return null;
+    const played = sp.acts.map((_, i) => handEv[i + 1]).filter((x, i) => x != null && Number.isFinite(x) && ps.strat[cell][i] > 0.004);
+    const mine = handEv[result.choice + 1];
+    if (!played.length || mine == null || !Number.isFinite(mine)) return null;
+    return Math.max(0, Math.max(...played) - mine);
+  })();
   const layout = n === 3 ? LAYOUT3 : LAYOUT2;
   const dealer = pos.indexOf(n === 3 ? "BTN" : "SB");
   const at = (xy: number[]) => ({ left: `${xy[0]}%`, top: `${xy[1]}%` });
@@ -793,7 +957,10 @@ function Table({ deal, cfg, width, height, onAnswer, onNext }: { deal: Deal; cfg
   const fs = fontFor(width, height);
   return (
     <div className={cls("pk", result && (result.ok ? "ok" : "ko"))} style={{ width, height, fontSize: fs }}>
-      <div className="pk-spot">{ps.label}</div>
+      <div className="pk-spot">
+        {ps.label}
+        {deal.note && <span className="pk-note"> · {deal.note}</span>}
+      </div>
       <div className="pk-felt">
         <div className="pk-rail">
           <div className="pk-cloth">
@@ -877,10 +1044,12 @@ function Table({ deal, cfg, width, height, onAnswer, onNext }: { deal: Deal; cfg
                 <span key={a.id}>
                   <i className="gw-dot" style={{ background: colors[i] }} />
                   {a.label} {num(ps.strat[cell][i] * 100, 0)} %
+                  {handEv?.[i + 1] != null && <span className="pk-ev"> · EV {num(handEv[i + 1], 2)}</span>}
                 </span>
               ) : null,
             )}
           </div>
+          {evLost != null && evLost > 0.0005 && <div className="pk-evloss">Ta décision coûte {num(evLost, 2)} bb d'EV par rapport à la meilleure action</div>}
           <div className="gw pk-grid">
             <HandGrid
               highlight={new Set([cell])}

@@ -2,7 +2,7 @@
 
 use crate::analysis::Scenario;
 use crate::import::{self, ImportResult, Progress};
-use crate::model::card_str;
+use crate::model::{card_str, ActKind};
 use crate::settings::Settings;
 use crate::stats::breakdown::{self, Bar, DayCount, MultRow, Row};
 use crate::stats::challenges::{self, Challenge, ChallengeView};
@@ -379,6 +379,74 @@ pub fn hands(state: State<AppState>, q: HandQuery) -> Value {
     // leurs mains sont retenues
     let tours: HashSet<usize> = ids.iter().map(|&hi| s.hands[hi].t).collect();
     json!({ "total": total, "rows": rows, "net": sums.0, "ev": sums.1, "tournaments": tours.len(), "complete": total == all_hands })
+}
+
+/// Lignes préflop des mains (toutes, ou celles de `ids`) pour les comparer aux ranges :
+/// positions dans l'ordre de l'arbre (3 joueurs : BTN, SB, BB ; tête-à-tête : SB, BB), tapis
+/// de départ en bb, cartes du héros et actions volontaires avec le total misé (« relance à »).
+#[tauri::command]
+pub fn preflop_lines(state: State<AppState>, ids: Option<Vec<String>>) -> Vec<Value> {
+    preflop_lines_of(&state.store.read(), ids.as_deref())
+}
+
+pub fn preflop_lines_of(s: &crate::store::Store, ids: Option<&[String]>) -> Vec<Value> {
+    let want: Option<HashSet<&str>> = ids.map(|v| v.iter().map(|x| x.as_str()).collect());
+    let mut out = Vec::new();
+    for r in &s.hands {
+        let h = &r.h;
+        if let Some(w) = &want {
+            if !w.contains(h.id.as_str()) {
+                continue;
+            }
+        }
+        let n = h.seats.len();
+        if !(n == 2 || n == 3) || h.bb <= 0.0 {
+            continue;
+        }
+        let poster = |k: ActKind| h.actions.iter().find(|a| a.street == 0 && a.kind == k).map(|a| a.p as usize);
+        let (Some(sb), Some(bb)) = (poster(ActKind::SmallBlind), poster(ActKind::BigBlind)) else { continue };
+        if sb == bb {
+            continue;
+        }
+        let order: Vec<usize> = if n == 3 {
+            let btn = (0..3).find(|i| *i != sb && *i != bb).unwrap_or(h.button as usize);
+            vec![btn, sb, bb]
+        } else {
+            vec![sb, bb]
+        };
+        let pos_of = |p: usize| order.iter().position(|x| *x == p);
+        let Some(hero_pos) = pos_of(h.hero as usize) else { continue };
+        // total misé au préflop par joueur (blindes comprises, antes exclues)
+        let mut put = vec![0.0f64; n];
+        let mut acts: Vec<Value> = Vec::new();
+        for a in h.actions.iter().filter(|a| a.street == 0) {
+            let p = a.p as usize;
+            match a.kind {
+                ActKind::Ante => continue,
+                ActKind::SmallBlind | ActKind::BigBlind => {
+                    put[p] += a.amount;
+                    continue;
+                }
+                _ => {}
+            }
+            put[p] += a.amount;
+            let k = match a.kind {
+                ActKind::Fold => "F",
+                ActKind::Check => "X",
+                ActKind::Call => "C",
+                _ => "R",
+            };
+            let Some(pi) = pos_of(p) else { continue };
+            acts.push(json!([pi, k, (put[p] / h.bb * 1000.0).round() / 1000.0, a.allin]));
+        }
+        out.push(json!({
+            "id": h.id, "tid": h.tid, "ts": h.ts, "n": n, "hero": hero_pos,
+            "stacks": order.iter().map(|&p| (h.seats[p].stack / h.bb * 1000.0).round() / 1000.0).collect::<Vec<_>>(),
+            "cards": h.seats[h.hero as usize].cards.map(|c| [card_str(c[0]), card_str(c[1])]),
+            "acts": acts,
+        }));
+    }
+    out
 }
 
 #[tauri::command]

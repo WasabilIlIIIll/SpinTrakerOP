@@ -25,6 +25,8 @@ pub struct ImportResult {
     pub millis: u128,
     /// numéro de lot : permet de supprimer cet import depuis l'historique
     pub batch: i64,
+    /// identifiants des mains ajoutées (analyse préflop après import)
+    pub hand_ids: Vec<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -169,6 +171,7 @@ pub fn run_with(
         })
         .collect();
     res.imported = analyzed.len();
+    res.hand_ids = analyzed.iter().map(|(h, _)| h.id.clone()).collect();
 
     // fusion avec les tournois déjà connus
     let mut st = store.write();

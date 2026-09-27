@@ -6,9 +6,13 @@ import { Btn, Loading, Modal, Panel, Seg } from "../components/ui";
 import { Icon } from "../components/Icon";
 import { Heatmap } from "../components/Heatmap";
 import { cls, num, realDate } from "../lib/format";
+import { ReviewModal } from "../components/ReviewModal";
+import { analyze, linesApi, pendingReview, saveReview, type Analysis } from "../lib/review";
+import { parseBook, rangesApi, type RangeBook } from "../lib/ranges";
 
 export function ImportPage() {
-  const { bump, toast, overview, filter } = useApp();
+  const { bump, toast, overview, filter, prefs, go } = useApp();
+  const [review, setReview] = useState<{ a: Analysis; book: RangeBook } | null>(null);
   const [del, setDel] = useState<{ id: number; label: string; remaining: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ phase: string; done: number; total: number } | null>(null);
@@ -28,6 +32,34 @@ export function ImportPage() {
       setResult(r);
       bump();
       toast(`${num(r.imported)} mains importées en ${(r.millis / 1000).toFixed(1)} s`);
+      // décisions préflop des nouvelles mains comparées aux ranges
+      if (r.hand_ids?.length) {
+        try {
+          const book = parseBook(await rangesApi.load());
+          if (book.books.length) {
+            const threshold = Number((prefs.trainer as { threshold?: number } | undefined)?.threshold ?? 0.1);
+            const a = analyze(await linesApi.get(r.hand_ids), book, threshold);
+            if (a.decisions.length) {
+              const ok = a.decisions.filter((d) => d.ok).length;
+              await saveReview(
+                {
+                  ts: Math.floor(Date.now() / 1000),
+                  label: `Import du ${realDate(Math.floor(Date.now() / 1000))}`,
+                  decisions: a.decisions.length,
+                  ok,
+                  evLoss: a.decisions.reduce((x, d) => x + (d.evLoss ?? 0), 0),
+                  errors: a.decisions.filter((d) => !d.ok),
+                },
+                rangesApi.trainerLoad,
+                rangesApi.trainerSave,
+              );
+              setReview({ a, book });
+            }
+          }
+        } catch (e) {
+          toast(`Analyse préflop impossible : ${e}`, "err");
+        }
+      }
     } catch (e) {
       toast(String(e), "err");
     } finally {
@@ -219,6 +251,20 @@ export function ImportPage() {
             </Btn>
           </div>
         </Modal>
+      )}
+      {review && (
+        <ReviewModal
+          a={review.a}
+          book={review.book}
+          title="Tes décisions préflop de cet import"
+          onClose={() => setReview(null)}
+          onReplay={(errors) => {
+            pendingReview.items = errors;
+            pendingReview.label = "Erreurs de l'import";
+            setReview(null);
+            go("ranges");
+          }}
+        />
       )}
     </div>
   );

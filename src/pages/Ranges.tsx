@@ -5,6 +5,7 @@ import { useApp } from "../lib/state";
 import { Btn, Help, Modal, Seg } from "../components/ui";
 import { HandGrid } from "../components/HandGrid";
 import { Trainer } from "../components/Trainer";
+import { pendingReview } from "../lib/review";
 import { cls, num } from "../lib/format";
 import { gridToString, stringToGrid } from "../lib/solver";
 import {
@@ -22,6 +23,7 @@ import {
   implicitIndex,
   isDefined,
   mapHistory,
+  potOf,
   lastDecision,
   playerCombos,
   playerRange,
@@ -63,7 +65,8 @@ export function useRangeBook() {
 }
 
 export function RangesPage() {
-  const [tab, setTab] = useState<"ranges" | "trainer">("ranges");
+  // une review arrivant de l'import ouvre directement le trainer
+  const [tab, setTab] = useState<"ranges" | "trainer">(pendingReview.items?.length ? "trainer" : "ranges");
   const { book, update } = useRangeBook();
   return (
     <div className="page">
@@ -202,6 +205,9 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
   const fileFreq = spot ? db?.freq?.[spot.key] : undefined;
   const totals = computed && fileFreq ? { ...computed, freq: acts.map((a) => fileFreq[a.id] ?? 0) } : computed;
   const shown = hover ?? cell;
+  // EV par main (fichiers qui la donnent, ex. ranges HU) : [EV de la main, EV de chaque action]
+  const evs = spot ? db?.ev?.[spot.key] : undefined;
+  const evOf = (c: number) => evs?.[cellName(c)];
 
   // comparaison : range d'un adversaire au même spot (par défaut le dernier à avoir relancé,
   // sinon le dernier à avoir parlé sans se coucher, sinon le prochain à parler)
@@ -358,7 +364,7 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
         ) : (
           <div className="gw-tile cur">
             <div className="gw-t">{cur.terminal === "fold" ? "Fin du coup" : cur.terminal === "allin" ? "Tapis" : "Flop"}</div>
-            <div className="gw-sub">pot {fmtBB(cur.put.reduce((a, b) => a + b, 0))} bb</div>
+            <div className="gw-sub">pot {fmtBB(potOf(cur, sizes))} bb</div>
           </div>
         )}
         {spot &&
@@ -521,6 +527,7 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
             {shown != null && (
               <div className="gw-cellinfo">
                 <b>{cellName(shown)}</b> · {cellCombos(shown)} combos · atteinte {num(reach[shown] * 100, 0)} %
+                {evOf(shown) && <b className={(evOf(shown)![0] ?? 0) >= 0 ? "gw-pos" : "gw-neg"}> · EV {num(evOf(shown)![0], 2)} bb</b>}
                 {compare && vs >= 0 && vsRange && (
                   <span className="gw-mut">
                     {" "}
@@ -535,6 +542,7 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
                     <span key={a.id}>
                       <i className="gw-dot" style={{ background: colors[i] }} />
                       {a.label} {num(view[shown][i] * 100, 0)} %
+                      {evOf(shown)?.[i + 1] != null && <span className="gw-mut"> · EV {num(evOf(shown)![i + 1], 2)}</span>}
                     </span>
                   ))}
                 </div>
@@ -580,6 +588,11 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
                       <th>Main</th>
                       <th>Stratégie</th>
                       <th className="r">Range</th>
+                      {evs && (
+                        <th className="r" title="EV de la main en bb, avec la stratégie du solveur (du point de vue du joueur qui parle)">
+                          EV
+                        </th>
+                      )}
                       {acts.map((a, i) => (
                         <th key={a.id} className="r">
                           <i className="gw-dot" style={{ background: colors[i] }} />
@@ -591,7 +604,7 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
                   <tbody>
                     {Array.from({ length: 169 }, (_, c) => c)
                       .filter((c) => reach[c] > 0.001 && (cell == null || c === cell))
-                      .sort((a, b) => view[a][implicitIndex(acts)] - view[b][implicitIndex(acts)] || a - b)
+                      .sort((a, b) => (evs ? (evOf(b)?.[0] ?? -1e9) - (evOf(a)?.[0] ?? -1e9) : 0) || view[a][implicitIndex(acts)] - view[b][implicitIndex(acts)] || a - b)
                       .map((c) => (
                         <tr key={c} className={cls("clk", cell === c && "sel")} onClick={() => setCell(cell === c ? null : c)}>
                           <td>
@@ -603,11 +616,15 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
                             </div>
                           </td>
                           <td className="r">{num(reach[c], 2)}</td>
-                          {view[c].map((f, i) => (
-                            <td key={i} className="r">
-                              {f > 0.0005 ? `${num(f * 100, 0)}%` : <span className="gw-mut">–</span>}
-                            </td>
-                          ))}
+                          {evs && <td className={cls("r", "gw-ev", (evOf(c)?.[0] ?? 0) >= 0 ? "gw-pos" : "gw-neg")}>{evOf(c) ? num(evOf(c)![0], 2) : "–"}</td>}
+                          {view[c].map((f, i) => {
+                            const e = evOf(c)?.[i + 1];
+                            return (
+                              <td key={i} className="r" title={e != null ? `EV ${acts[i].label} : ${num(e, 3)} bb` : undefined}>
+                                {f > 0.0005 ? `${num(f * 100, 0)}%` : <span className="gw-mut">–</span>}
+                              </td>
+                            );
+                          })}
                         </tr>
                       ))}
                   </tbody>

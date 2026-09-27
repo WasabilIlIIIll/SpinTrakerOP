@@ -204,6 +204,7 @@ pub fn run() {
             commands::backup_database,
             commands::export_csv,
             commands::scenarios,
+            commands::preflop_lines,
             ranges::ranges_load,
             ranges::ranges_save,
             ranges::ranges_export,

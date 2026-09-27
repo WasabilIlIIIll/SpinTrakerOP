@@ -8,3 +8,6 @@ src-tauri/gen
 maintest/
 samples/private/
 src-tauri/crates/*/target
+
+# copies temporaires des vraies données (jamais dans le dépôt)
+_reel_tmp/

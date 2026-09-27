@@ -989,3 +989,23 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
 .ts-bar i.bad { background: color-mix(in srgb, var(--neg) 55%, transparent); }
 .ts-bar span { position: relative; font-size: .74rem; font-weight: 700; padding-left: 6px; line-height: 16px; color: var(--text); }
 .tr-target { font-size: 1rem !important; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- analyse des mains jouées ---------- */
+.rv { display: flex; flex-direction: column; gap: 18px; min-width: min(760px, 90vw); }
+.rv-top { display: flex; gap: 26px; align-items: center; }
+.rv-track { fill: none; stroke: var(--surface3); stroke-width: 12; }
+.rv-arc { fill: none; stroke-width: 12; stroke-linecap: round; transition: stroke-dasharray .6s ease; }
+.rv-pct { fill: var(--text); font-size: 28px; font-weight: 800; font-family: var(--font-d); }
+.rv-sub { fill: var(--muted); font-size: 11px; }
+.rv-facts { display: flex; flex-direction: column; gap: 8px; }
+.rv-big { font-size: 1.05rem; }
+.rv-big b { font-size: 1.3rem; }
+.rv-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 22px; }
+.rv-h { font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 6px; }
+.tr-done { display: flex; align-items: center; gap: 16px; padding: 18px 20px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); }
+.tr-done b { font-size: 1.1rem; }
+.pk-note { color: #c9a45a; }
+.pk-ev { color: #9fb3c8; }
+.pk-evloss { font-size: .8em; color: #ff8a80; }
+.gw-ev { font-variant-numeric: tabular-nums; }
+.rv-warn { font-size: .84rem; line-height: 1.45; padding: 10px 14px; border-radius: 10px; background: color-mix(in srgb, var(--warn) 14%, transparent); border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); }

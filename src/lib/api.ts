@@ -459,6 +459,8 @@ export interface ImportResult {
   millis: number;
   batch: number;
   skipped: number;
+  /** mains ajoutées par cet import (analyse préflop) */
+  hand_ids: string[];
 }
 
 export interface ImportRow {

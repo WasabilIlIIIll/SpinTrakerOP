@@ -192,7 +192,16 @@ fn main() {
             }
             println!("ruptures de tapis : {breaks} · places incohérentes : {wrong_place}");
         }
-        Some("imports") => match state.db.lock().imports() {
+        Some("lines") => {
+            {
+                let mut db = state.db.lock();
+                let mut st = state.store.write();
+                import::load(&mut db, &mut st).ok();
+            }
+            let v = spin_tracker_op_lib::commands::preflop_lines_of(&state.store.read(), None);
+            println!("{}", serde_json::Value::Array(v));
+        }
+                Some("imports") => match state.db.lock().imports() {
             Ok(rows) => rows.iter().for_each(|r| println!("{r}")),
             Err(e) => println!("erreur : {e}"),
         },
