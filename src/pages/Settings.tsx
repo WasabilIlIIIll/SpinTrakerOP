@@ -3,22 +3,8 @@ import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { api, type MultTable, type Settings as S } from "../lib/api";
 import { ALL_STATS_SECTIONS, useApp, DEFAULT_PREFS, clearCache } from "../lib/state";
 import { Btn, NumInput, Panel, Seg, Toggle, Modal } from "../components/ui";
-import { THEMES, EDITABLE_VARS, themeById } from "../lib/themes";
 import { Icon } from "../components/Icon";
 import { cls, date, money, num, nowNaive } from "../lib/format";
-import { CHIP_SERIES } from "./ChipsTab";
-import { BR_SERIES } from "./BankrollTab";
-
-/** rgba()/couleur nommée -> #rrggbb pour l'input color */
-function toHex(c: string): string {
-  if (c.startsWith("#")) return c.length === 4 ? `#${c[1]}${c[1]}${c[2]}${c[2]}${c[3]}${c[3]}` : c.slice(0, 7);
-  const m = c.match(/rgba?\(([^)]+)\)/);
-  if (m) {
-    const [r, g, b] = m[1].split(",").map((x) => Math.round(parseFloat(x)));
-    return `#${[r, g, b].map((v) => Math.max(0, Math.min(255, v || 0)).toString(16).padStart(2, "0")).join("")}`;
-  }
-  return "#888888";
-}
 
 const SECTION_NAMES: Record<string, string> = {
   tiles: "Tuiles de synthèse",
@@ -44,7 +30,7 @@ export function SettingsPage() {
           value={tab}
           onChange={setTab}
           options={[
-            { v: "look", l: "Apparence" },
+            { v: "look", l: "Général" },
             { v: "calc", l: "Calculs" },
             { v: "mult", l: "Multiplicateurs" },
             { v: "data", l: "Données" },
@@ -63,53 +49,8 @@ function Look() {
   const { prefs, setPrefs } = useApp();
   return (
     <>
-      <Panel title="Thème">
-        <div className="themes">
-          <button className={cls("theme-card", prefs.theme === "auto" && "on")} onClick={() => setPrefs({ theme: "auto", accent: null })}>
-            <span className="tc-prev" style={{ background: "linear-gradient(110deg, #f4f5f7 50%, #0a0b0d 50%)" }}>
-              <Icon name="sparkle" size={18} />
-            </span>
-            Auto (système)
-          </button>
-          {THEMES.map((t) => (
-            <button key={t.id} className={cls("theme-card", prefs.theme === t.id && "on")} onClick={() => setPrefs({ theme: t.id, accent: null })}>
-              <span className="tc-prev" style={{ background: t.vars["--bg"] }}>
-                <i style={{ background: t.vars["--accent"] }} />
-                <i style={{ background: t.vars["--gold"] }} />
-                <i style={{ background: t.vars["--pos"] }} />
-                <i style={{ background: t.vars["--surface2"] }} />
-              </span>
-              {t.name}
-            </button>
-          ))}
-        </div>
-        <div className="row gap16 wrap" style={{ marginTop: 16 }}>
-          <label className="field">
-            Couleur d'accent
-            <div className="row gap8">
-              <input type="color" value={prefs.accent ?? themeById(prefs.theme).vars["--accent"]} onChange={(e) => setPrefs({ accent: e.target.value })} />
-              {prefs.accent && (
-                <Btn small onClick={() => setPrefs({ accent: null })}>
-                  Réinitialiser
-                </Btn>
-              )}
-            </div>
-          </label>
-          <label className="field">
-            Densité
-            <Seg small value={prefs.density} onChange={(v) => setPrefs({ density: v })} options={[{ v: "cozy", l: "Confort" }, { v: "compact", l: "Compact" }]} />
-          </label>
-          <label className="field">
-            Taille du texte
-            <div className="row gap8">
-              <input type="range" min={0.85} max={1.25} step={0.05} value={prefs.fontScale} onChange={(e) => setPrefs({ fontScale: +e.target.value })} />
-              <span className="muted small">{Math.round(prefs.fontScale * 100)} %</span>
-            </div>
-          </label>
-          <label className="field">
-            Arrondi
-            <input type="range" min={0} max={20} step={1} value={prefs.radius} onChange={(e) => setPrefs({ radius: +e.target.value })} />
-          </label>
+      <Panel title="Général">
+        <div className="row gap16 wrap">
           <label className="field">
             Langue
             <Seg small value={prefs.lang} onChange={(v) => setPrefs({ lang: v })} options={[{ v: "fr", l: "Français" }, { v: "en", l: "English" }]} />
@@ -121,56 +62,8 @@ function Look() {
         </div>
         <div className="row gap16 wrap" style={{ marginTop: 14 }}>
           <Toggle on={prefs.fourColor} onChange={(v) => setPrefs({ fourColor: v })} label="Jeu 4 couleurs" />
-          <Toggle on={prefs.animations} onChange={(v) => setPrefs({ animations: v })} label="Animations" />
           <Toggle on={!!prefs.privacy["__all"]} onChange={(v) => setPrefs({ privacy: { ...prefs.privacy, __all: v } })} label="Mode discret (tout flouter)" />
         </div>
-      </Panel>
-      <Panel title="Personnaliser le thème" help="Chaque couleur du thème sélectionné peut être remplacée. Les modifications s'appliquent instantanément et sont conservées.">
-        <div className="colors-grid">
-          {EDITABLE_VARS.map(([v, label]) => (
-            <label key={v} className="color-row">
-              <input
-                type="color"
-                value={toHex(prefs.themeVars[v] ?? themeById(prefs.theme).vars[v] ?? "#888888")}
-                onChange={(e) => setPrefs({ themeVars: { ...prefs.themeVars, [v]: e.target.value } })}
-              />
-              {label}
-              {prefs.themeVars[v] && (
-                <button
-                  className="icon-btn"
-                  title="Rétablir"
-                  onClick={() => {
-                    const n = { ...prefs.themeVars };
-                    delete n[v];
-                    setPrefs({ themeVars: n });
-                  }}
-                >
-                  <Icon name="refresh" size={12} />
-                </button>
-              )}
-            </label>
-          ))}
-        </div>
-        <Btn small icon="refresh" onClick={() => setPrefs({ themeVars: {} })}>
-          Rétablir les couleurs du thème
-        </Btn>
-      </Panel>
-      <Panel title="Couleurs des courbes">
-        <div className="colors-grid">
-          {[...CHIP_SERIES, ...BR_SERIES].map((s) => (
-            <label key={s.key + s.color} className="color-row">
-              <input
-                type="color"
-                value={prefs.chartColors[s.color] ?? getComputedStyle(document.documentElement).getPropertyValue(s.color).trim()}
-                onChange={(e) => setPrefs({ chartColors: { ...prefs.chartColors, [s.color]: e.target.value } })}
-              />
-              {s.label}
-            </label>
-          ))}
-        </div>
-        <Btn small onClick={() => setPrefs({ chartColors: {} })} icon="refresh">
-          Couleurs par défaut
-        </Btn>
       </Panel>
       <Panel title="Sections de l'onglet Stats" help="Choisissez les blocs affichés et leur ordre.">
         <div className="fchips">

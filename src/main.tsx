@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { App } from "./App";
 import { AppProvider } from "./lib/state";
 import "./styles/app.css";
+import "./styles/spatial.css";
 
 /** Écran d'erreur : évite la page blanche en cas de plantage de l'interface. */
 class Boundary extends React.Component<{ children: React.ReactNode }, { err: Error | null }> {

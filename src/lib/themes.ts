@@ -39,7 +39,46 @@ const seriesLight = {
   "--s-rb": "#7b8794",
 };
 
+/** Design unique « Spatial » : panneaux de verre sombre sur une salle de poker floue. */
+export const SPATIAL: Theme = {
+  id: "spatial",
+  name: "Spatial",
+  dark: true,
+  vars: {
+    "--menu": "#2a2724",
+    "--bg": "#15120f",
+    "--bg-grad": "none",
+    "--bg2": "rgba(255,255,255,0.05)",
+    "--surface": "rgba(255,255,255,0.075)",
+    "--surface2": "rgba(255,255,255,0.1)",
+    "--surface3": "rgba(255,255,255,0.16)",
+    "--border": "rgba(255,255,255,0.17)",
+    "--line": "rgba(255,255,255,0.09)",
+    "--text": "#f6f5f3",
+    "--muted": "rgba(246,245,243,0.64)",
+    "--faint": "rgba(246,245,243,0.42)",
+    "--accent": "#3b7bff",
+    "--accent-ink": "#ffffff",
+    "--accent-soft": "rgba(59,123,255,0.24)",
+    "--lime": "#c9f25c",
+    "--gold": "#f0c36a",
+    "--pos": "#5ee08a",
+    "--neg": "#ff6f6a",
+    "--warn": "#f5b841",
+    "--felt": "#1f5a3c",
+    "--felt2": "#113322",
+    "--rail": "#3b2a1c",
+    "--blur": "28px",
+    "--shadow-1": "inset 0 1px 0 rgba(255,255,255,0.08), 0 12px 32px rgba(0,0,0,0.28)",
+    "--shadow-2": "0 30px 80px rgba(0,0,0,0.5)",
+    ...seriesDark,
+    "--s-chips": "#c9f25c",
+    "--s-ev": "#6aa3ff",
+  },
+};
+
 export const THEMES: Theme[] = [
+  SPATIAL,
   {
     id: "clair",
     name: "Lumière",

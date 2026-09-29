@@ -168,24 +168,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // design unique « Spatial » : plus de thèmes, de taille de texte ni de densité au choix
   useEffect(() => {
-    if (prefs.theme !== "auto") return;
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const h = () => applyTheme(prefs.theme, prefs.accent, { ...prefs.themeVars, ...prefs.chartColors });
-    mq.addEventListener("change", h);
-    return () => mq.removeEventListener("change", h);
-  }, [prefs]);
-
-  useEffect(() => {
-    applyTheme(prefs.theme, prefs.accent, { ...prefs.themeVars, ...prefs.chartColors });
+    applyTheme("spatial");
     setLang(prefs.lang);
     setFormatPrefs(prefs.currency, prefs.lang === "fr" ? "fr-FR" : "en-US");
     const root = document.documentElement;
-    root.style.setProperty("--radius", `${prefs.radius}px`);
-    root.style.fontSize = `${14 * prefs.fontScale}px`;
-    root.dataset.density = prefs.density;
-    root.dataset.anim = prefs.animations ? "on" : "off";
-  }, [prefs]);
+    root.style.setProperty("--radius", "16px");
+    root.style.fontSize = "14px";
+    root.dataset.density = "cozy";
+    root.dataset.anim = "on";
+  }, [prefs.lang, prefs.currency]);
 
   // attente du chargement de la base
   useEffect(() => {

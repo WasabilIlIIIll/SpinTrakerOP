@@ -2,7 +2,10 @@ import { useState } from "react";
 import { api } from "../lib/api";
 import { useApp, useQuery } from "../lib/state";
 import { KpiRow } from "../components/KpiRow";
-import { Seg, Empty, Btn } from "../components/ui";
+import { Empty, Btn } from "../components/ui";
+import { FilterBar } from "../components/FilterBar";
+import { PaneLeft, PaneRight } from "../components/Spatial";
+import { cls } from "../lib/format";
 import { ChipsTab } from "./ChipsTab";
 import { BankrollTab } from "./BankrollTab";
 import { StatsTab } from "./StatsTab";
@@ -30,22 +33,35 @@ export function Dashboard() {
     );
   }
   return (
-    <div className="page">
-      {!full && <KpiRow s={s} />}
-      <div className="tabs-row">
-        <Seg
-          value={tab}
-          onChange={(v) => setPrefs({ dashboardTab: v })}
-          options={[
-            { v: "chips", l: t("Chips gagnés") },
-            { v: "bankroll", l: t("Bankroll") },
-            { v: "stats", l: t("Stats") },
-          ]}
-        />
+    <div className="page dash">
+      <PaneLeft>
+        <div className="pane-title">Sélection</div>
+        <FilterBar />
+      </PaneLeft>
+      <PaneRight>
+        <div className="pane-title">Chiffres clés</div>
+        <div className="dash-kpis">
+          <KpiRow s={s} />
+        </div>
+      </PaneRight>
+      <div className="bubble">
+        {(
+          [
+            ["chips", t("Chips gagnés")],
+            ["bankroll", t("Bankroll")],
+            ["stats", t("Stats")],
+          ] as const
+        ).map(([v, l]) => (
+          <button key={v} className={cls(tab === v && "on")} onClick={() => setPrefs({ dashboardTab: v })}>
+            {l}
+          </button>
+        ))}
       </div>
-      {tab === "chips" && <ChipsTab full={full} onFull={() => setFull(!full)} />}
-      {tab === "bankroll" && <BankrollTab full={full} onFull={() => setFull(!full)} />}
-      {tab === "stats" && <StatsTab />}
+      <div className="dash-body" key={tab}>
+        {tab === "chips" && <ChipsTab full={full} onFull={() => setFull(!full)} />}
+        {tab === "bankroll" && <BankrollTab full={full} onFull={() => setFull(!full)} />}
+        {tab === "stats" && <StatsTab />}
+      </div>
     </div>
   );
 }
