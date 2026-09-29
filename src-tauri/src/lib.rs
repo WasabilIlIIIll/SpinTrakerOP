@@ -241,10 +241,15 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("erreur au lancement de Spin Tracker OP")
         .run(|handle, event| {
-            // à la fermeture, tout est reporté dans le fichier principal de la base
+            // à la fermeture, tout est reporté dans le fichier principal de la base. On n'attend
+            // jamais plus de 2 s qu'un autre traitement libère la base : sinon le programme
+            // resterait en mémoire, sans fenêtre (chaque écriture est de toute façon déjà
+            // enregistrée dans le journal de la base).
             if let tauri::RunEvent::Exit = event {
                 if let Some(state) = handle.try_state::<AppState>() {
-                    state.db.lock().checkpoint();
+                    if let Some(db) = state.db.try_lock_for(std::time::Duration::from_secs(2)) {
+                        db.checkpoint();
+                    }
                 }
             }
         });
