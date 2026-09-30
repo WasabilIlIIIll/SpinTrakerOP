@@ -3105,6 +3105,7 @@ dependencies = [
 name = "spin-tracker-op"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "parking_lot",
  "postflop-solver",
  "rayon",
@@ -3117,6 +3118,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-dialog",
  "walkdir",
+ "windows-sys 0.59.0",
  "zip",
 ]
 

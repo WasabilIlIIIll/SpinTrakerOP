@@ -46,6 +46,7 @@ export function App() {
     <>
       <SpatialShell
         page={page}
+        title={t(NAV.find((n) => n[0] === page)?.[1] ?? "")}
         nav={
           <>
             <div className="brand">

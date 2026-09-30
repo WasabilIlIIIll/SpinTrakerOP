@@ -4,7 +4,7 @@ import { useApp, useQuery } from "../lib/state";
 import { KpiRow } from "../components/KpiRow";
 import { Empty, Btn } from "../components/ui";
 import { FilterBar } from "../components/FilterBar";
-import { PaneLeft, PaneRight } from "../components/Spatial";
+import { PaneLeft, PaneRight, PaneTop } from "../components/Spatial";
 import { cls } from "../lib/format";
 import { ChipsTab } from "./ChipsTab";
 import { BankrollTab } from "./BankrollTab";
@@ -44,19 +44,21 @@ export function Dashboard() {
           <KpiRow s={s} />
         </div>
       </PaneRight>
-      <div className="bubble">
-        {(
-          [
-            ["chips", t("Chips gagnés")],
-            ["bankroll", t("Bankroll")],
-            ["stats", t("Stats")],
-          ] as const
-        ).map(([v, l]) => (
-          <button key={v} className={cls(tab === v && "on")} onClick={() => setPrefs({ dashboardTab: v })}>
-            {l}
-          </button>
-        ))}
-      </div>
+      <PaneTop>
+        <div className="bubble">
+          {(
+            [
+              ["chips", t("Chips gagnés")],
+              ["bankroll", t("Bankroll")],
+              ["stats", t("Stats")],
+            ] as const
+          ).map(([v, l]) => (
+            <button key={v} className={cls(tab === v && "on")} onClick={() => setPrefs({ dashboardTab: v })}>
+              {l}
+            </button>
+          ))}
+        </div>
+      </PaneTop>
       <div className="dash-body" key={tab}>
         {tab === "chips" && <ChipsTab full={full} onFull={() => setFull(!full)} />}
         {tab === "bankroll" && <BankrollTab full={full} onFull={() => setFull(!full)} />}

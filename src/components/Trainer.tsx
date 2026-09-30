@@ -2,7 +2,7 @@
 // Bonne réponse : main suivante. Erreur : la range du spot s'affiche, la main entourée en violet.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "../lib/state";
-import { Btn, Help, Panel } from "./ui";
+import { Btn, Help, Loading, Panel } from "./ui";
 import { HandGrid } from "./HandGrid";
 import { TrainerStats } from "./TrainerStats";
 import { ReviewModal } from "./ReviewModal";
@@ -180,6 +180,10 @@ export function Trainer({ book }: { book: RangeBook }) {
   const setCfg = (p: Partial<Cfg>) => setPrefs({ trainer: { ...cfg, ...p } });
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<Progress>({ version: 1, spots: {}, days: {} });
+  // la progression enregistrée doit être lue AVANT toute session : sinon une session partie
+  // d'une progression vide l'écraserait (bug corrigé le 30/09/2026). En cas d'échec de lecture,
+  // rien n'est jamais réécrit.
+  const [loaded, setLoaded] = useState<"no" | "ok" | "err">("no");
   const [last, setLast] = useState<{ n: number; ok: number } | null>(null);
   /** session ciblée (faiblesses ou catégorie) lancée depuis le suivi */
   const [custom, setCustom] = useState<{ pool: PoolSpot[]; label: string } | null>(null);
@@ -207,14 +211,15 @@ export function Trainer({ book }: { book: RangeBook }) {
     setReview({ queue, label });
     setRunning(true);
   };
-  // erreurs transmises par l'import
+  // erreurs transmises par l'import (une fois la progression lue)
   useEffect(() => {
+    if (loaded === "no") return;
     if (pendingReview.items?.length) {
       const items = pendingReview.items;
       pendingReview.items = null;
       startReview(items, pendingReview.label || "Review");
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loaded]); // eslint-disable-line react-hooks/exhaustive-deps
   const analyseAll = async () => {
     setAnalysing(true);
     try {
@@ -231,7 +236,7 @@ export function Trainer({ book }: { book: RangeBook }) {
         };
         const next = { ...progress, reviews: [entry, ...(progress.reviews ?? [])].slice(0, 20) };
         setProgress(next);
-        rangesApi.trainerSave(JSON.stringify(next)).catch(() => {});
+        if (loaded === "ok") rangesApi.trainerSave(JSON.stringify(next)).catch(() => {});
       }
     } catch (e) {
       toast(String(e), "err");
@@ -242,8 +247,14 @@ export function Trainer({ book }: { book: RangeBook }) {
   useEffect(() => {
     rangesApi
       .trainerLoad()
-      .then((j) => j && setProgress({ version: 1, spots: {}, days: {}, ...JSON.parse(j) }))
-      .catch(() => {});
+      .then((j) => {
+        if (j) setProgress({ version: 1, spots: {}, days: {}, ...JSON.parse(j) });
+        setLoaded("ok");
+      })
+      .catch(() => {
+        setLoaded("err");
+        toast("Progression du trainer illisible : elle ne sera pas modifiée", "err");
+      });
   }, []);
 
   const depthsWith = [...new Set(book.books.filter((b) => b.fmt === cfg.fmt && Object.keys(b.nodes).length).map((b) => b.depth))].sort((a, b) => b - a);
@@ -255,9 +266,11 @@ export function Trainer({ book }: { book: RangeBook }) {
   const index = useMemo(() => new Map(buildPool(book, cfg.fmt, depthsWith, [], []).map((p) => [p.id, p])), [book, cfg.fmt, depthsWith.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const sessionPool = review ? review.queue.map((q) => q.ps) : custom?.pool.length ? custom.pool : pool;
+  if (running && loaded === "no") return <Loading />;
   if (running && sessionPool.length)
     return (
       <Session
+        canSave={loaded === "ok"}
         pool={sessionPool}
         label={review?.label ?? custom?.label}
         queue={review?.queue}
@@ -396,7 +409,7 @@ export function Trainer({ book }: { book: RangeBook }) {
         title="Tes décisions en jeu"
         help="Tes mains réelles comparées à tes ranges, décision par décision, à la profondeur de range la plus proche du tapis effectif. Chaque import est analysé automatiquement ; tu peux aussi analyser toute ta base."
         right={
-          <Btn icon="search" onClick={analyseAll} disabled={analysing}>
+          <Btn icon="search" onClick={analyseAll} disabled={analysing || loaded === "no"}>
             {analysing ? "Analyse…" : "Analyser toute ma base"}
           </Btn>
         }
@@ -597,6 +610,7 @@ function fit(n: number, W: number, H: number, gap = 10): { cols: number; w: numb
 }
 
 function Session({
+  canSave,
   pool,
   label,
   queue,
@@ -605,6 +619,7 @@ function Session({
   setProgress,
   onStop,
 }: {
+  canSave: boolean;
   pool: PoolSpot[];
   label?: string;
   queue?: QItem[];
@@ -657,7 +672,7 @@ function Session({
     () => () => {
       timers.current.forEach((t) => window.clearTimeout(t));
       window.clearTimeout(saveT.current);
-      rangesApi.trainerSave(JSON.stringify(prog.current)).catch(() => {});
+      (canSave ? rangesApi.trainerSave(JSON.stringify(prog.current)) : Promise.resolve()).catch(() => {});
     },
     [],
   );
@@ -700,7 +715,7 @@ function Session({
     };
     setProgress(prog.current);
     window.clearTimeout(saveT.current);
-    saveT.current = window.setTimeout(() => rangesApi.trainerSave(JSON.stringify(prog.current)).catch(() => {}), 1500);
+    saveT.current = window.setTimeout(() => (canSave ? rangesApi.trainerSave(JSON.stringify(prog.current)) : Promise.resolve()).catch(() => {}), 1500);
     if (ok) timers.current.push(window.setTimeout(() => next(t), 650));
     else if (!cfg.waitClick) timers.current.push(window.setTimeout(() => next(t), cfg.showMs));
   };

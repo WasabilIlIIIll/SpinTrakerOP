@@ -8,6 +8,7 @@ pub mod import;
 pub mod model;
 pub mod parser;
 pub mod settings;
+pub mod desktop;
 pub mod ranges;
 pub mod solver;
 pub mod stats;
@@ -78,10 +79,23 @@ fn daily_backup(db: &db::Db, dir: &std::path::Path) {
     if !dest.exists() {
         let _ = db.snapshot(&dest);
     }
-    let mut all: Vec<PathBuf> = std::fs::read_dir(&bdir).map(|r| r.filter_map(|e| e.ok().map(|e| e.path())).collect()).unwrap_or_default();
-    all.sort();
-    while all.len() > 7 {
-        let _ = std::fs::remove_file(all.remove(0));
+    // ranges et progression du trainer : une copie par jour aussi
+    for name in ["ranges", "trainer"] {
+        let src = dir.join(format!("{name}.json"));
+        let dst = bdir.join(format!("{name}-{day}.json"));
+        if src.exists() && !dst.exists() {
+            let _ = std::fs::copy(&src, &dst);
+        }
+    }
+    // 7 dernières copies de chaque sorte (les dossiers de sauvegarde manuelle sont conservés)
+    for prefix in ["spintracker-", "ranges-", "trainer-"] {
+        let mut all: Vec<PathBuf> = std::fs::read_dir(&bdir)
+            .map(|r| r.filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.is_file() && p.file_name().map(|n| n.to_string_lossy().starts_with(prefix)).unwrap_or(false)).collect())
+            .unwrap_or_default();
+        all.sort();
+        while all.len() > 7 {
+            let _ = std::fs::remove_file(all.remove(0));
+        }
     }
 }
 
@@ -205,6 +219,7 @@ pub fn run() {
             commands::export_csv,
             commands::scenarios,
             commands::preflop_lines,
+            desktop::desktop_wallpaper,
             ranges::ranges_load,
             ranges::ranges_save,
             ranges::ranges_export,

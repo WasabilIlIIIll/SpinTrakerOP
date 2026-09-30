@@ -32,6 +32,11 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 parking_lot = "0.12"
 # moteur postflop : fork de b-inary/postflop-solver (AGPL-3.0), voir crates/postflop-solver
 postflop-solver = { path = "crates/postflop-solver", features = ["zstd"] }
+base64 = "0.22"
+
+[target.'cfg(windows)'.dependencies]
+# lecture du fond d'écran (coque « posée sur le bureau »)
+windows-sys = { version = "0.59", features = ["Win32_UI_WindowsAndMessaging"] }
 
 [profile.release]
 opt-level = 3

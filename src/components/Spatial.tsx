@@ -3,6 +3,7 @@
 // redressent au survol. Chaque page remplit les panneaux latéraux par <PaneLeft> / <PaneRight>.
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { invoke } from "@tauri-apps/api/core";
 import { useApp, useQuery } from "../lib/state";
 import { api } from "../lib/api";
 import { cls, money, num, tone } from "../lib/format";
@@ -10,10 +11,22 @@ import { cls, money, num, tone } from "../lib/format";
 interface Slots {
   left: HTMLElement | null;
   right: HTMLElement | null;
+  top: HTMLElement | null;
   claimRight: (on: boolean) => void;
+  claimTop: (on: boolean) => void;
 }
 
-const SlotCtx = createContext<Slots>({ left: null, right: null, claimRight: () => {} });
+const SlotCtx = createContext<Slots>({ left: null, right: null, top: null, claimRight: () => {}, claimTop: () => {} });
+
+/** Contenu propre à la page dans la barre du haut (ex. bulle Chips gagnés / Bankroll / Stats). */
+export function PaneTop({ children }: { children: ReactNode }) {
+  const { top, claimTop } = useContext(SlotCtx);
+  useEffect(() => {
+    claimTop(true);
+    return () => claimTop(false);
+  }, [claimTop]);
+  return top ? createPortal(children, top) : null;
+}
 
 /** Contenu propre à la page dans le panneau de gauche (sous la navigation). */
 export function PaneLeft({ children }: { children: ReactNode }) {
@@ -31,8 +44,45 @@ export function PaneRight({ children }: { children: ReactNode }) {
   return right ? createPortal(children, right) : null;
 }
 
-/** Décor : salle chaude, lampe, fenêtre et table de poker floues, lumières qui dérivent. */
+/** Fond : le fond d'écran Windows, placé exactement comme sur le bureau (mode « remplir »),
+ * pour que les panneaux semblent posés dessus. Sans fond image, décor de salle de poker. */
 export function Scene() {
+  const [wall, setWall] = useState<{ url: string; w: number; h: number } | null>(null);
+  const [, redraw] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      invoke<string | null>("desktop_wallpaper")
+        .then((url) => {
+          if (!url || !alive) return;
+          const img = new Image();
+          img.onload = () => alive && setWall({ url, w: img.naturalWidth, h: img.naturalHeight });
+          img.src = url;
+        })
+        .catch(() => {});
+    load();
+    // fond changé pendant que l'application tourne : relu au retour sur la fenêtre
+    const onFocus = () => load();
+    const onResize = () => redraw((n) => n + 1);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("resize", onResize);
+    return () => {
+      alive = false;
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("resize", onResize);
+    };
+  }, []);
+  if (wall) {
+    // « remplir » : l'image couvre tout l'écran, centrée ; la fenêtre en montre la partie qu'elle recouvre
+    const sw = window.screen.width;
+    const sh = window.screen.height;
+    const k = Math.max(sw / wall.w, sh / wall.h);
+    const w = wall.w * k;
+    const h = wall.h * k;
+    const x = (sw - w) / 2 - (window.screenX || 0);
+    const y = (sh - h) / 2 - (window.screenY || 0);
+    return <div className="scene wall" aria-hidden="true" style={{ backgroundImage: `url(${wall.url})`, backgroundSize: `${w}px ${h}px`, backgroundPosition: `${x}px ${y}px` }} />;
+  }
   return (
     <div className="scene" aria-hidden="true">
       <div className="scene-table" />
@@ -42,15 +92,38 @@ export function Scene() {
   );
 }
 
-export function SpatialShell({ nav, foot, page, children }: { nav: ReactNode; foot?: ReactNode; page: string; children: ReactNode }) {
+/** Réduire / fermer : l'application n'a plus de barre de titre Windows. */
+function WindowControls() {
+  const win = () => import("@tauri-apps/api/window").then((m) => m.getCurrentWindow());
+  return (
+    <div className="winctl">
+      <button title="Réduire" aria-label="Réduire" onClick={() => win().then((w) => w.minimize())}>
+        <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+      </button>
+      <button title="Fermer" aria-label="Fermer" className="close" onClick={() => win().then((w) => w.close())}>
+        <svg width="12" height="12" viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+      </button>
+    </div>
+  );
+}
+
+export function SpatialShell({ nav, foot, page, title, children }: { nav: ReactNode; foot?: ReactNode; page: string; title: string; children: ReactNode }) {
   const [left, setLeft] = useState<HTMLElement | null>(null);
   const [right, setRight] = useState<HTMLElement | null>(null);
+  const [top, setTop] = useState<HTMLElement | null>(null);
   const [owned, setOwned] = useState(0);
+  const [ownedTop, setOwnedTop] = useState(0);
   const [claim] = useState(() => (on: boolean) => setOwned((n) => Math.max(0, n + (on ? 1 : -1))));
+  const [claimTop] = useState(() => (on: boolean) => setOwnedTop((n) => Math.max(0, n + (on ? 1 : -1))));
   return (
-    <SlotCtx.Provider value={{ left, right, claimRight: claim }}>
+    <SlotCtx.Provider value={{ left, right, top, claimRight: claim, claimTop }}>
       <div className="stage">
         <Scene />
+        <div className="topbar-float" key={`top-${page}`}>
+          <div className="top-slot" ref={setTop} />
+          {ownedTop === 0 && <div className="top-title">{title}</div>}
+        </div>
+        <WindowControls />
         <div className="spatial">
           <aside className="pane pane-left">
             <div className="pane-scroll">
