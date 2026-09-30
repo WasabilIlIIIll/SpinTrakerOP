@@ -226,7 +226,7 @@ function StatsSide() {
 
 function SeriesPick({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
   const opts = [
-    ["chips", "Chips réels", "--s-nsd"],
+    ["chips", "Chips réels", "--s-chips"],
     ["ev", "EV (chips)", "--s-ev"],
   ];
   return (
@@ -250,7 +250,7 @@ function PositionPanel() {
   const groups = useMemo(() => {
     if (!data) return [];
     const g = [];
-    if (ser.includes("chips")) g.push({ label: "Chips", color: "var(--s-nsd)", values: data.map((d) => d.chips), ci: data.map((d) => d.chips_ci) });
+    if (ser.includes("chips")) g.push({ label: "Chips", color: "var(--s-chips)", values: data.map((d) => d.chips), ci: data.map((d) => d.chips_ci) });
     if (ser.includes("ev")) g.push({ label: "CEV", color: "var(--s-ev)", values: data.map((d) => d.ev), ci: data.map((d) => d.ev_ci) });
     return g;
   }, [data, ser]);
@@ -645,7 +645,7 @@ function StackPanel() {
           sub={data.map((d) => `${num(d.hands)}`)}
           details={data.map((d) => [`${num(d.hands)} mains`, `IC 95 % CEV ± ${num(d.ev_ci, 0)} bb/100`])}
           groups={[
-            { label: "Chips", color: "var(--s-nsd)", values: data.map((d) => d.chips) },
+            { label: "Chips", color: "var(--s-chips)", values: data.map((d) => d.chips) },
             { label: "CEV", color: "var(--s-ev)", values: data.map((d) => d.ev) },
           ]}
           height={280}

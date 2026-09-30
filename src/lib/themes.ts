@@ -72,8 +72,13 @@ export const SPATIAL: Theme = {
     "--shadow-1": "inset 0 1px 0 rgba(255,255,255,0.08), 0 12px 32px rgba(0,0,0,0.28)",
     "--shadow-2": "0 30px 80px rgba(0,0,0,0.5)",
     ...seriesDark,
-    "--s-chips": "#c9f25c",
-    "--s-ev": "#6aa3ff",
+    // Chips gagnés reprend la palette de Bankroll : réel = bleu (Réel + RB), EV = or (EV Profit),
+    // SD = vert (Profit réel), NSD = violet (EV Multi), CEV min = rose (EV effectif)
+    "--s-chips": "#4d9bff",
+    "--s-ev": "#f3b13a",
+    "--s-sd": "#3ecf6d",
+    "--s-nsd": "#c77dff",
+    "--s-min": "#ff8fab",
   },
 };
 
