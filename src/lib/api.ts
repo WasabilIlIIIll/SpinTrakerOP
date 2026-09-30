@@ -371,6 +371,25 @@ export interface Post {
   bets_raises_flop: [number, number];
 }
 
+/** Arbre de décision postflop (stats/ptree.rs). */
+export interface PNode {
+  street: number;
+  actor: string;
+  subject: boolean;
+  n: number;
+  r: number;
+  net: number;
+  kids: { label: string; node: PNode }[];
+}
+
+export interface PTree {
+  pots: { key: string; label: string; n: number }[];
+  pot: string;
+  hands: number;
+  ref_hands: number;
+  root: PNode;
+}
+
 export interface LeakReport {
   player: string;
   hands: number;
@@ -518,7 +537,9 @@ export const api = {
   playerProfile: (name: string) => call<PlayerProfile>("player_profile", { name }),
   savePlayerMeta: (name: string, tags: string[], notes: string) => call<void>("save_player_meta", { name, tags, notes }),
   tagsOverview: () => call<TagsOverviewRow[]>("tags_overview"),
-  leakReport: (player: string, filter: Filter, reference: string) => call<LeakReport>("leak_report", { player, filter, reference }),
+  leakReport: (player: string, filter: Filter, reference: string, vs?: string) => call<LeakReport>("leak_report", { player, filter, reference, vs: vs ?? null }),
+  postflopTree: (q: { player: string; filter: Filter; vs: string; table: string; mePos: string; oppPos: string; pot: string; buckets: string[] }) =>
+    call<PTree>("postflop_tree", { player: q.player, filter: q.filter, vs: q.vs, table: q.table, mePos: q.mePos, oppPos: q.oppPos, pot: q.pot, buckets: q.buckets }),
   getSettings: () => call<Settings>("get_settings"),
   saveSettings: (settings: Settings) => call<void>("save_settings", { settings }),
   defaultSettings: () => call<Settings>("default_settings"),

@@ -3,6 +3,7 @@ pub mod challenges;
 pub mod charts;
 pub mod leaks;
 pub mod players;
+pub mod ptree;
 pub mod summary;
 
 use crate::store::Store;

@@ -341,10 +341,82 @@ fn postflop(r: &HandRec, pi: usize, acc: &mut HashMap<&'static str, Post>) {
     }
 }
 
+/// Qui est analysé : le héros, un joueur (ancienne forme : pseudo seul, toutes ses mains),
+/// ou un ensemble de joueurs (`player:<pseudo>`, `players:<a>|<b>`, `tag:<id>`), limité aux
+/// tournois sélectionnés.
+pub enum Subject {
+    Hero,
+    Legacy(String),
+    Set(HashSet<String>),
+}
+
+impl Subject {
+    pub fn parse(s: &Store, player: &str) -> Subject {
+        if player.is_empty() || player == "hero" || s.is_hero(player) {
+            Subject::Hero
+        } else if let Some(n) = player.strip_prefix("player:") {
+            Subject::Set([n.to_string()].into_iter().collect())
+        } else if let Some(list) = player.strip_prefix("players:") {
+            Subject::Set(list.split('|').filter(|x| !x.is_empty()).map(|x| x.to_string()).collect())
+        } else if let Some(tag) = player.strip_prefix("tag:") {
+            Subject::Set(s.pstats.keys().filter(|n| !s.is_hero(n) && s.tags_of(n).iter().any(|t| t == tag)).cloned().collect())
+        } else if player == "population" {
+            Subject::Set(s.pstats.keys().filter(|n| !s.is_hero(n)).cloned().collect())
+        } else {
+            Subject::Legacy(player.to_string())
+        }
+    }
+
+    /// Sièges analysés dans une main.
+    pub fn seats(&self, s: &Store, r: &HandRec, sel: &HashSet<usize>) -> Vec<usize> {
+        match self {
+            Subject::Hero => {
+                if sel.contains(&r.t) {
+                    vec![r.h.hero as usize]
+                } else {
+                    vec![]
+                }
+            }
+            Subject::Legacy(n) => r.h.seats.iter().position(|x| x.name == *n).into_iter().collect(),
+            Subject::Set(set) => {
+                if !sel.contains(&r.t) {
+                    return vec![];
+                }
+                r.h.seats.iter().enumerate().filter(|(_, x)| set.contains(&x.name) && !s.is_hero(&x.name)).map(|(i, _)| i).collect()
+            }
+        }
+    }
+}
+
+/// Filtre « contre » : au moins un autre joueur de la main correspond.
+/// `vs` : "" / "all" | "hero" | "tag:<id>" | "player:<pseudo>"
+pub fn vs_ok(s: &Store, r: &HandRec, me: usize, vs: &str) -> bool {
+    if vs.is_empty() || vs == "all" {
+        return true;
+    }
+    r.h.seats.iter().enumerate().any(|(i, x)| {
+        i != me
+            && if vs == "hero" {
+                s.is_hero(&x.name)
+            } else if let Some(tag) = vs.strip_prefix("tag:") {
+                !s.is_hero(&x.name) && s.tags_of(&x.name).iter().any(|t| t == tag)
+            } else if let Some(n) = vs.strip_prefix("player:") {
+                x.name == n
+            } else {
+                true
+            }
+    })
+}
+
 /// `reference` : "population" | "tag:<id>" | "custom" | "none"
 pub fn leak_report(s: &Store, player: &str, filter: &Filter, reference: &str, min_matrix: bool) -> LeakReport {
+    leak_report_vs(s, player, filter, reference, min_matrix, "")
+}
+
+pub fn leak_report_vs(s: &Store, player: &str, filter: &Filter, reference: &str, min_matrix: bool, vs: &str) -> LeakReport {
     let ref_mode = reference;
-    let is_hero = player.is_empty() || s.is_hero(player);
+    let subject = Subject::parse(s, player);
+    let is_hero = matches!(subject, Subject::Hero);
     let sel: HashSet<usize> = filter.select(s).into_iter().collect();
     let ref_players: Option<HashSet<String>> = if let Some(tag) = reference.strip_prefix("tag:") {
         Some(s.pstats.keys().filter(|n| s.tags_of(n).iter().any(|t| t == tag)).cloned().collect())
@@ -359,16 +431,8 @@ pub fn leak_report(s: &Store, player: &str, filter: &Filter, reference: &str, mi
     let mut post_ref: HashMap<&'static str, Post> = HashMap::new();
     let use_pop = reference == "population" || ref_players.is_some();
     for r in &s.hands {
-        let me: Option<usize> = if is_hero {
-            if sel.contains(&r.t) {
-                Some(r.h.hero as usize)
-            } else {
-                None
-            }
-        } else {
-            r.h.seats.iter().position(|x| x.name == player)
-        };
-        if let Some(pi) = me {
+        let mine_seats: Vec<usize> = subject.seats(s, r, &sel).into_iter().filter(|&pi| vs_ok(s, r, pi, vs)).collect();
+        for &pi in &mine_seats {
             hands += 1;
             *scen_hands.entry(r.f.players[pi].scenario).or_default() += 1;
             let cards = r.h.seats[pi].cards;
@@ -388,7 +452,10 @@ pub fn leak_report(s: &Store, player: &str, filter: &Filter, reference: &str, mi
         }
         if use_pop {
             for (i, seat) in r.h.seats.iter().enumerate() {
-                if Some(i) == me || s.is_hero(&seat.name) && is_hero {
+                if mine_seats.contains(&i) || s.is_hero(&seat.name) && is_hero {
+                    continue;
+                }
+                if !vs_ok(s, r, i, vs) {
                     continue;
                 }
                 if let Some(rp) = &ref_players {

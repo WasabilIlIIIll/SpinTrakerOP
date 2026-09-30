@@ -208,6 +208,7 @@ pub fn run() {
             commands::save_player_meta,
             commands::tags_overview,
             commands::leak_report,
+            commands::postflop_tree,
             commands::get_settings,
             commands::save_settings,
             commands::default_settings,

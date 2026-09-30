@@ -644,8 +644,25 @@ pub fn tags_overview(state: State<AppState>) -> Value {
 }
 
 #[tauri::command]
-pub fn leak_report(state: State<AppState>, player: String, filter: Filter, reference: String) -> LeakReport {
-    leaks::leak_report(&state.store.read(), &player, &filter, &reference, true)
+pub fn leak_report(state: State<AppState>, player: String, filter: Filter, reference: String, vs: Option<String>) -> LeakReport {
+    leaks::leak_report_vs(&state.store.read(), &player, &filter, &reference, true, vs.as_deref().unwrap_or(""))
+}
+
+/// Arbre de décision postflop d'un duel (voir stats/ptree.rs).
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub fn postflop_tree(
+    state: State<AppState>,
+    player: String,
+    filter: Filter,
+    vs: String,
+    table: String,
+    me_pos: String,
+    opp_pos: String,
+    pot: String,
+    buckets: Vec<String>,
+) -> crate::stats::ptree::PTree {
+    crate::stats::ptree::postflop_tree(&state.store.read(), &player, &filter, &vs, &table, &me_pos, &opp_pos, &pot, &buckets)
 }
 
 #[tauri::command]

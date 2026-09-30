@@ -48,20 +48,23 @@ panneau central et deux panneaux latéraux inclinés).
 | Joueurs | Recherche, tags | Liste des adversaires | Joueur survolé (HU, stats, notes) — **fait** |
 | Ranges | Onglets, import/export, spot : format, profondeur, tailles | Coup, grille (ou comparaison) | Actions, mains, EV — **fait** |
 | Trainer | Réglages de session | Tables | Score, précision, raccourcis |
-| Leak finder | Situations, filtres | Arbre de décision / grille | Stats du nœud choisi |
+| Leak finder | Joueur analysé, « contre », situation, référence, duel | Préflop, arbre postflop, stats postflop, comparaison, mes ranges vs mon jeu (bulle en haut) | Écarts à la référence, grilles de mains, détail du spot — **fait** |
 | Challenges | Liste | Challenge choisi | Rythme, progression |
 | Import | Formats, historique | Zone de dépôt, calendrier | Résultat, analyse préflop |
 | Paramètres | Rubriques | Réglages | Aide |
 
 ## Nouveautés prévues
 
-1. **Leak finder postflop en arbre de décision** (ex. BTN vs BB, pot relancé) : flop → donk /
-   check → c-bet / check → fold / call / raise, avec fréquences, nombre de mains et barres de
-   répartition par taille de mise ; filtres de tapis (20+ bb, 18-20…), position analysée, héros
-   contre tous ou contre un type de joueur.
-2. **Comparaison de ranges préflop observées** : grille de fréquences réelles du héros par
-   situation (BTN, SB vs BTN, SB vs BB…) et, à côté, celle des réguliers ou d'un type de joueur
-   (estimée à partir des mains vues), avec les écarts ; comparaison aussi avec ses propres ranges.
+1. **Leak finder postflop en arbre de décision** — **fait** (30/09) : duel au choix (3-max ou
+   tête-à-tête, poste analysé contre poste adverse), type de pot et agresseur, tranches de tapis
+   effectif ; colonnes flop → turn → river, mises regroupées par taille (⅓, ½, ¾, pot, overbet,
+   tapis), fréquence du sujet et de la référence (autres joueurs au même poste), résultat moyen,
+   liste des écarts les plus marqués. Sujet : moi, un joueur, un groupe, un tag ; « contre » :
+   tous, un tag, un joueur.
+2. **Comparaison de ranges préflop observées** — **fait** (30/09) : vue « Comparer » (moi à
+   gauche, un joueur / un groupe / les Regs à droite, chacun avec son filtre « contre »), écart
+   par situation et grilles des mains jouées (pour les autres : mains vues à l'abattage) ; vue
+   « Mes ranges » : mes ranges face à mes mains réelles, spot par spot.
 3. **Précision face aux ranges à l'import** (fait) : fenêtre de précision, review des erreurs.
 
 ## Plus tard

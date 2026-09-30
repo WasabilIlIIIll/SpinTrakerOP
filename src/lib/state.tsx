@@ -52,6 +52,10 @@ export interface UiPrefs {
   /** CEV par profil de table : tags pris en compte et groupe de joueurs */
   profileTags?: string[];
   profileGroup?: string[];
+  /** leak finder : vue, joueur analysé, filtres (voir pages/LeakFinder.tsx) */
+  leak?: Partial<import("../pages/LeakFinder").LeakPrefs>;
+  /** arbre postflop : duel, pot, tapis */
+  ptree?: { table: string; me: string; opp: string; pot: string; buckets: string[] };
 }
 
 export interface Layout {

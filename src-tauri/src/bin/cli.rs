@@ -138,6 +138,50 @@ fn main() {
                 );
             }
         }
+        Some("leakjson") => {
+            {
+                let mut db = state.db.lock();
+                let mut st = state.store.write();
+                import::load(&mut db, &mut st).ok();
+            }
+            let s = state.store.read();
+            let a = |i: usize, d: &str| args.get(i).cloned().unwrap_or_else(|| d.to_string());
+            let r = stats::leaks::leak_report_vs(&s, &a(1, ""), &Default::default(), &a(2, "population"), true, &a(3, ""));
+            println!("{}", serde_json::to_string(&r).unwrap());
+        }
+        Some("ptreejson") => {
+            {
+                let mut db = state.db.lock();
+                let mut st = state.store.write();
+                import::load(&mut db, &mut st).ok();
+            }
+            let s = state.store.read();
+            let a = |i: usize, d: &str| args.get(i).cloned().unwrap_or_else(|| d.to_string());
+            let t = stats::ptree::postflop_tree(&s, &a(1, ""), &Default::default(), &a(2, ""), &a(3, "3max"), &a(4, "BTN"), &a(5, "BB"), &a(6, ""), &[]);
+            println!("{}", serde_json::to_string(&t).unwrap());
+        }
+        Some("ptree") => {
+            {
+                let mut db = state.db.lock();
+                let mut st = state.store.write();
+                import::load(&mut db, &mut st).ok();
+            }
+            let s = state.store.read();
+            let a = |i: usize, d: &str| args.get(i).cloned().unwrap_or_else(|| d.to_string());
+            let t = stats::ptree::postflop_tree(&s, &a(1, ""), &Default::default(), &a(2, "all"), &a(3, "3max"), &a(4, "BTN"), &a(5, "BB"), &a(6, ""), &[]);
+            fn show(n: &stats::ptree::PNode, depth: usize, label: &str) {
+                if depth > 4 || n.n + n.r < 20 {
+                    return;
+                }
+                println!("{}{} -> [{} {}] n={} r={} net={:.1}", "  ".repeat(depth), label, n.actor, n.street, n.n, n.r, n.net);
+                for e in &n.kids {
+                    show(&e.node, depth + 1, &e.label);
+                }
+            }
+            println!("pots {:?}", t.pots.iter().map(|p| (&p.label, p.n)).collect::<Vec<_>>());
+            println!("pot {} · sujet {} mains · référence {}", t.pot, t.hands, t.ref_hands);
+            show(&t.root, 0, "ROOT");
+        }
         Some("check") => {
             {
                 let mut db = state.db.lock();
