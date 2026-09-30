@@ -8,7 +8,6 @@ import { Icon } from "../components/Icon";
 import { cls, date, money, num, nowNaive } from "../lib/format";
 
 const SECTION_NAMES: Record<string, string> = {
-  tiles: "Tuiles de synthèse",
   position: "CEV par position",
   sessions: "Sessions",
   results: "Résultats groupés",

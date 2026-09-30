@@ -85,8 +85,8 @@ pub fn by_position(state: State<AppState>, filter: Filter, per: String) -> Vec<B
 }
 
 #[tauri::command]
-pub fn by_profile(state: State<AppState>, filter: Filter) -> Vec<Bar> {
-    breakdown::by_profile(&state.store.read(), &filter)
+pub fn by_profile(state: State<AppState>, filter: Filter, tags: Option<Vec<String>>, group: Option<Vec<String>>) -> Vec<Bar> {
+    breakdown::by_profile(&state.store.read(), &filter, tags, group)
 }
 
 #[tauri::command]

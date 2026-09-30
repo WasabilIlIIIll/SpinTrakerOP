@@ -2,18 +2,13 @@ import { useMemo, useState, type ReactNode } from "react";
 import { api, type Row } from "../lib/api";
 import { ALL_STATS_SECTIONS, useApp, useQuery } from "../lib/state";
 import { BarChart } from "../components/BarChart";
-import { Btn, Dropdown, Loading, Panel, Priv, Seg, Stat } from "../components/ui";
+import { Btn, Dropdown, Loading, Panel, Priv, Seg } from "../components/ui";
 import { Icon } from "../components/Icon";
 import { cls, date, duration, money, mult, num, pct, time, tone } from "../lib/format";
 import { t } from "../lib/i18n";
+import { PaneRight } from "../components/Spatial";
 
-const EV_MODES = [
-  { v: "ev", l: "EV Profit" },
-  { v: "ev_multi", l: "EV Multi" },
-  { v: "ev_eff", l: "EV effectif" },
-  { v: "real_rb", l: "Réel + RB" },
-] as const;
-type EvMode = (typeof EV_MODES)[number]["v"];
+
 
 const GROUPS: [string, string][] = [
   ["month", "Mois"],
@@ -30,7 +25,6 @@ const GROUPS: [string, string][] = [
 
 /** Blocs disponibles : titre et largeur par défaut (sur 6 colonnes). */
 export const WIDGETS: Record<string, { title: string; w: number }> = {
-  tiles: { title: "Synthèse", w: 6 },
   position: { title: "CEV par position", w: 6 },
   sessions: { title: "Sessions", w: 6 },
   results: { title: "Résultats groupés", w: 3 },
@@ -75,6 +69,9 @@ export function StatsTab() {
   };
   return (
     <div className="stats">
+      <PaneRight>
+        <StatsSide />
+      </PaneRight>
       <div className="row gap8" style={{ justifyContent: "flex-end" }}>
         {edit && hidden.length > 0 && (
           <Dropdown label={<><Icon name="plus" size={13} /> Ajouter un bloc</>} align="right" closeOnClick>
@@ -136,8 +133,6 @@ export function StatsTab() {
 
 function Widget({ id }: { id: string }): ReactNode {
   switch (id) {
-    case "tiles":
-      return <TilesPanel />;
     case "position":
       return <PositionPanel />;
     case "sessions":
@@ -163,25 +158,69 @@ function Widget({ id }: { id: string }): ReactNode {
   }
 }
 
-function TilesPanel() {
-  const { filter } = useApp();
-  const [mode, setMode] = useState<EvMode>("ev");
+const ROI_MODES = [
+  { v: "real_rb", l: "Réel + RB" },
+  { v: "ev", l: "EV Profit" },
+  { v: "ev_multi", l: "EV Multi" },
+  { v: "ev_eff", l: "EV effectif" },
+  { v: "real", l: "Réel hors RB" },
+] as const;
+
+/** Synthèse des Stats dans le panneau de droite : clic sur un chiffre = variante suivante. */
+function StatsSide() {
+  const { filter, prefs, setPrefs } = useApp();
   const { data: s } = useQuery(["summary", filter], () => api.summary(filter));
-  const evLabel = EV_MODES.find((m) => m.v === mode)!.l;
-  if (!s) return <Loading h={90} />;
+  if (!s) return null;
+  const tiles: { k: string; modes: { label: string; value: ReactNode; tone?: string; sub?: ReactNode; priv?: boolean }[] }[] = [
+    { k: "st_roi", modes: ROI_MODES.map((m) => ({ label: `ROI ${m.l}`, value: pct(s.roi[m.v]), tone: tone(s.roi[m.v]), priv: true })) },
+    { k: "st_hour", modes: ROI_MODES.map((m) => ({ label: `${m.l} / heure`, value: `${money(s.hourly[m.v])} /h`, tone: tone(s.hourly[m.v]), priv: true })) },
+    {
+      k: "st_time",
+      modes: [
+        { label: t("Temps joué"), value: duration(s.seconds), sub: `${num(s.avg_tables, 1)} tables en moyenne` },
+        { label: "Durée moyenne d'un spin", value: duration(s.avg_duration) },
+      ],
+    },
+    {
+      k: "st_rate",
+      modes: [
+        { label: t("Spins/h"), value: num(s.spins_per_hour, 1) },
+        { label: "Mains / spin", value: num(s.hands_per_spin, 1) },
+      ],
+    },
+    {
+      k: "st_buyin",
+      modes: [
+        { label: t("Buy-in moyen"), value: money(s.avg_buyin) },
+        { label: "Buy-ins joués", value: money(s.buyins) },
+      ],
+    },
+  ];
   return (
-    <div className="tiles-wrap">
-      <div className="tiles">
-        <Stat label={t("Buy-in moyen")} value={money(s.avg_buyin)} />
-        <Stat label={t("Temps joué")} value={duration(s.seconds)} sub={`${num(s.avg_tables, 1)} tables en moyenne`} />
-        <Stat label={t("Spins/h")} value={num(s.spins_per_hour, 1)} sub={`${num(s.hands_per_spin, 1)} mains / spin`} />
-        <Stat label={<><i className="evdot" />ROI {evLabel}</>} value={pct(s.roi[mode])} tone={tone(s.roi[mode])} k="profit" />
-        <Stat label={<><i className="evdot" />{evLabel} /heure</>} value={`${money(s.hourly[mode])} /h`} tone={tone(s.hourly[mode])} k="profit" />
+    <>
+      <div className="pane-title">Synthèse</div>
+      <div className="dash-kpis">
+        <div className="kpis">
+          {tiles.map(({ k, modes }) => {
+            const mi = (prefs.kpiModes[k] ?? 0) % modes.length;
+            const m = modes[mi];
+            const hidden = (m.priv && prefs.privacy["profit"]) || prefs.privacy["__all"];
+            return (
+              <div key={k} className="kpi clickable" onClick={() => setPrefs({ kpiModes: { ...prefs.kpiModes, [k]: mi + 1 } })} title="Cliquer pour changer d'indicateur">
+                <div className="kpi-l">{m.label}</div>
+                <div className={cls("kpi-v", m.tone, hidden && "blurred")}>{m.value}</div>
+                {m.sub && <div className="kpi-s">{m.sub}</div>}
+                <div className="kpi-dots">
+                  {modes.map((_, i) => (
+                    <i key={i} className={cls(i === mi && "on")} />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
-      <div className="tiles-mode">
-        <Seg small value={mode} onChange={setMode} options={EV_MODES.map((m) => ({ v: m.v, l: m.l }))} />
-      </div>
-    </div>
+    </>
   );
 }
 
@@ -392,11 +431,38 @@ function ResultsPanel() {
 }
 
 function ProfilePanel() {
-  const { filter } = useApp();
-  const { data } = useQuery(["profile", filter], () => api.byProfile(filter));
-  const top = (data ?? []).slice(0, 8);
+  const { filter, prefs, setPrefs, settings } = useApp();
+  const tags = prefs.profileTags ?? ["reg", "fish"];
+  const group = prefs.profileGroup ?? [];
+  const [pick, setPick] = useState(false);
+  const { data } = useQuery(["profile", filter, tags, group], () => api.byProfile(filter, tags, group));
+  const top = (data ?? []).slice(0, 10);
+  const toggleTag = (id: string) => setPrefs({ profileTags: tags.includes(id) ? tags.filter((x) => x !== id) : [...tags, id] });
   return (
-    <Panel title={t("CEV par profil de table")} help="CEV selon les tags des deux adversaires du tournoi (tags automatiques ou manuels, voir Joueurs → Tags).">
+    <Panel
+      title={t("CEV par profil de table")}
+      help="CEV selon le profil des deux adversaires du tournoi. Par défaut Reg / Fish ; coche d'autres tags (Agressif…) ou choisis des joueurs : ils forment leur propre profil et seuls les tournois où ils sont présents comptent."
+      right={
+        <button className={cls("pill", (pick || group.length > 0) && "on")} onClick={() => setPick(!pick)}>
+          <Icon name="filter" size={13} /> Profils
+          {group.length > 0 && <b className="badge">{group.length}</b>}
+        </button>
+      }
+    >
+      {pick && (
+        <div className="prof-pick">
+          <div className="fchips">
+            {(settings?.tags ?? [])
+              .filter((tg) => tg.active)
+              .map((tg) => (
+                <button key={tg.id} className={cls("fchip", tags.includes(tg.id) && "on")} onClick={() => toggleTag(tg.id)}>
+                  {tg.name}
+                </button>
+              ))}
+          </div>
+          <PlayerGroup value={group} onChange={(g) => setPrefs({ profileGroup: g })} />
+        </div>
+      )}
       {data ? (
         top.length ? (
           <BarChart
@@ -414,6 +480,51 @@ function ProfilePanel() {
         <Loading h={300} />
       )}
     </Panel>
+  );
+}
+
+/** Choix d'un joueur ou d'un groupe de joueurs (recherche dans la base d'adversaires). */
+function PlayerGroup({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const [q, setQ] = useState("");
+  const { data } = useQuery(["players-pick", q], () => api.players({ search: q, tag: null, min_hands: 0, sort: "vs_hero_tournaments", desc: true, offset: 0, limit: 8 }), q.trim().length >= 2);
+  return (
+    <div className="col gap8">
+      <div className="fchips">
+        {value.map((n) => (
+          <span key={n} className="chip">
+            {n}
+            <button onClick={() => onChange(value.filter((x) => x !== n))} title="Retirer">
+              <Icon name="x" size={12} />
+            </button>
+          </span>
+        ))}
+        {value.length > 0 && (
+          <button className="fchip" onClick={() => onChange([])}>
+            Vider le groupe
+          </button>
+        )}
+      </div>
+      <input className="inp" placeholder="Ajouter un joueur au groupe (2 lettres minimum)…" value={q} onChange={(e) => setQ(e.target.value)} />
+      {q.trim().length >= 2 && data && (
+        <div className="fchips">
+          {data.rows
+            .filter((p) => !value.includes(p.name))
+            .map((p) => (
+              <button
+                key={p.name}
+                className="fchip"
+                onClick={() => {
+                  onChange([...value, p.name]);
+                  setQ("");
+                }}
+              >
+                <Icon name="plus" size={11} /> {p.name} <span className="muted">· {num(p.vs_hero_tournaments)} spins</span>
+              </button>
+            ))}
+          {!data.rows.length && <span className="muted small">Aucun joueur trouvé.</span>}
+        </div>
+      )}
+    </div>
   );
 }
 

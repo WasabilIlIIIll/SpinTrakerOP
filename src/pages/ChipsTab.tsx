@@ -6,6 +6,7 @@ import { Icon } from "../components/Icon";
 import { Dropdown, Empty, Loading, NumInput, Seg, Help } from "../components/ui";
 import { cls, num } from "../lib/format";
 import { t } from "../lib/i18n";
+import { PaneLeft } from "../components/Spatial";
 
 export const CHIP_SERIES: { key: string; label: string; color: string; help: string; dash?: number[]; main?: boolean }[] = [
   { key: "chips", label: "Chips", color: "--s-chips", help: "Jetons réellement gagnés (cumul).", main: true },
@@ -54,43 +55,52 @@ export function ChipsTab({ full, onFull }: { full?: boolean; onFull?: () => void
   }
   return (
     <div className={cls("chart-card", full && "full")}>
-      <div className="chart-stage">
-        <div className="ov ov-tr">
+      <PaneLeft>
+        <div className="pane-title">Graphique</div>
+        <div className="side-card">
           {data && (
-            <div className="chart-meta">
-              <span>
-                CEV <b>{num(data.cev, 1)}</b> ± {num(data.cev_ci, 0)}
-              </span>
-              <span>
-                min <b style={{ color: "var(--s-min)" }}>{num(data.min_cev, 1)}</b>
-              </span>
-              <span>
+            <div className="side-kv">
+              <span>CEV</span>
+              <b>
+                {num(data.cev, 1)} <span className="muted">± {num(data.cev_ci, 0)}</span>
+              </b>
+              <span>CEV minimum</span>
+              <b style={{ color: "var(--s-min)" }}>{num(data.min_cev, 1)}</b>
+              <span>Volume</span>
+              <b>
                 {num(data.hands)} mains · {num(data.tournaments)} spins
-              </span>
+              </b>
             </div>
           )}
-          <button className={cls("pill", prefs.showNotes && "on")} onClick={() => setPrefs({ showNotes: !prefs.showNotes })} title="Afficher les événements marquants sur la courbe">
-            <Icon name="sparkle" size={13} /> Événements
-          </button>
-          <button className={cls("pill", prefs.showCi && "on")} onClick={() => setPrefs({ showCi: !prefs.showCi })} title="Intervalle de confiance à 95 % du CEV">
-            <Icon name="target" size={13} /> IC 95 %
-          </button>
-          <Seg
-            small
-            value={axis}
-            onChange={(v) => setPrefs({ chipsAxis: v })}
-            options={[
-              { v: "hands", l: t("Mains") },
-              { v: "tournaments", l: t("Tournois") },
-              { v: "date", l: t("Date") },
-            ]}
-          />
-          {onFull && (
-            <button className="pill" onClick={onFull} title={full ? "Réduire" : "Agrandir le graphique"}>
-              <Icon name={full ? "x" : "layers"} size={13} /> {full ? "Réduire" : "Plein écran"}
+          <div className="side-ctl">
+            <span>Axe</span>
+            <Seg
+              small
+              value={axis}
+              onChange={(v) => setPrefs({ chipsAxis: v })}
+              options={[
+                { v: "hands", l: t("Mains") },
+                { v: "tournaments", l: t("Tournois") },
+                { v: "date", l: t("Date") },
+              ]}
+            />
+          </div>
+          <div className="side-pills">
+            <button className={cls("pill", prefs.showNotes && "on")} onClick={() => setPrefs({ showNotes: !prefs.showNotes })} title="Afficher les événements marquants sur la courbe">
+              <Icon name="sparkle" size={13} /> Événements
             </button>
-          )}
+            <button className={cls("pill", prefs.showCi && "on")} onClick={() => setPrefs({ showCi: !prefs.showCi })} title="Intervalle de confiance à 95 % du CEV">
+              <Icon name="target" size={13} /> IC 95 %
+            </button>
+          </div>
         </div>
+      </PaneLeft>
+      <div className="chart-stage">
+        {onFull && (
+          <button className="chart-full" onClick={onFull} title={full ? "Revenir aux trois panneaux" : "Graphique sur toute la fenêtre"}>
+            <Icon name={full ? "x" : "layers"} size={14} />
+          </button>
+        )}
         <div className="chart-area">
           {loading && !data ? (
             <Loading h={380} />

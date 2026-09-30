@@ -48,6 +48,10 @@ export interface UiPrefs {
   layout?: Partial<Layout>;
   /** blocs des panneaux latéraux, par page et par côté */
   sideWidgets?: Record<string, Partial<Record<"left" | "right", string[]>>>;
+  statsV2?: boolean;
+  /** CEV par profil de table : tags pris en compte et groupe de joueurs */
+  profileTags?: string[];
+  profileGroup?: string[];
 }
 
 export interface Layout {
@@ -71,7 +75,7 @@ export const DEFAULT_LAYOUT: Layout = { left: 17, right: 18, glass: 0.62, tilt: 
 export const layoutOf = (p: UiPrefs): Layout => ({ ...DEFAULT_LAYOUT, ...(p.layout ?? {}) });
 
 export const ALL_KPIS = ["tournaments", "cev", "rakeback", "profit", "roi", "hourly", "time", "luck", "finish", "avg_buyin", "spins_h", "min_cev"];
-export const ALL_STATS_SECTIONS = ["tiles", "position", "sessions", "results", "multipliers", "multitabling", "finishers", "profile", "stack", "hours", "weekdays"];
+export const ALL_STATS_SECTIONS = ["position", "results", "multipliers", "multitabling", "finishers", "profile", "stack", "hours", "weekdays", "sessions"];
 
 export const DEFAULT_PREFS: UiPrefs = {
   theme: "clair",
@@ -105,6 +109,7 @@ export const DEFAULT_PREFS: UiPrefs = {
   dashboardTab: "chips",
   page: "dashboard",
   eventsLayout: "vedette",
+  statsV2: true,
 };
 
 interface Ctx {
@@ -171,6 +176,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
             if (Array.isArray(raw.statsSections) && raw.statsWidths === undefined && !raw.statsSections.includes("sessions")) {
               const i = raw.statsSections.indexOf("position");
               raw.statsSections.splice(i >= 0 ? i + 1 : 0, 0, "sessions");
+            }
+            // disposition Stats v2 (30/09/2026) : la synthèse passe dans le panneau de droite,
+            // CEV par position en premier, sessions en dernier
+            if (Array.isArray(raw.statsSections) && !raw.statsV2) {
+              const rest = raw.statsSections.filter((x: string) => x !== "tiles" && x !== "position" && x !== "sessions");
+              raw.statsSections = ["position", ...rest, ...(raw.statsSections.includes("sessions") ? ["sessions"] : [])];
+              raw.statsV2 = true;
             }
             const p = { ...DEFAULT_PREFS, ...raw };
             setPrefsState(p);

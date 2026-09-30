@@ -77,7 +77,7 @@ export function RangesPage() {
           value={tab}
           onChange={setTab}
           options={[
-            { v: "ranges", l: "Ranges préflop" },
+            { v: "ranges", l: "Ranges" },
             { v: "trainer", l: "Trainer" },
           ]}
         />

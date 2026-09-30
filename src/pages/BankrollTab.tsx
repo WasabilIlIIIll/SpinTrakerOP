@@ -7,6 +7,7 @@ import type { BankrollChart as BankrollChartData } from "../lib/api";
 import { Icon } from "../components/Icon";
 import { cls, date, money, mult, num, tone } from "../lib/format";
 import { t } from "../lib/i18n";
+import { PaneLeft, PaneRight } from "../components/Spatial";
 
 export const BR_SERIES = [
   { key: "real_rb", label: "Réel + RB", color: "--s-realrb", help: "Profit réel, rakeback inclus." },
@@ -44,7 +45,28 @@ export function BankrollTab({ full, onFull }: { full?: boolean; onFull?: () => v
   const fmtY = (v: number) => `${num(v, Math.abs(v) < 100 ? 1 : 0)} ${prefs.currency}`;
   return (
     <div className="br-grid">
-      <div className={cls("chart-card", full ? "full" : "with-events")}>
+      <PaneLeft>
+        <div className="pane-title">Graphique</div>
+        <div className="side-card">
+          <div className="side-ctl">
+            <span>Axe</span>
+            <Seg small value={axis} onChange={(v) => setPrefs({ bankrollAxis: v })} options={[{ v: "tournaments", l: t("Tournois") }, { v: "date", l: t("Date") }]} />
+          </div>
+          <div className="side-pills">
+            <button className={cls("pill", prefs.showNotes && "on")} onClick={() => setPrefs({ showNotes: !prefs.showNotes })} title="Afficher les événements marquants sur la courbe">
+              <Icon name="sparkle" size={13} /> Événements
+            </button>
+          </div>
+          <Toggle on={prefs.includeBankrollStart} onChange={(v) => setPrefs({ includeBankrollStart: v })} label="Bankroll de départ" />
+        </div>
+      </PaneLeft>
+      {ev && (
+        <PaneRight>
+          <EventsPanel ev={ev} offset={offset} />
+        </PaneRight>
+      )}
+      <div className={cls("chart-card", full && "full")}>
+        <div className="chart-stage">
         <div className="chart-top">
           {sum && (
             <div className="br-sum">
@@ -67,14 +89,9 @@ export function BankrollTab({ full, onFull }: { full?: boolean; onFull?: () => v
             </div>
           )}
           <div className="grow" />
-          <button className={cls("pill", prefs.showNotes && "on")} onClick={() => setPrefs({ showNotes: !prefs.showNotes })} title="Afficher les événements marquants sur la courbe">
-            <Icon name="sparkle" size={13} /> Événements
-          </button>
-          <Toggle on={prefs.includeBankrollStart} onChange={(v) => setPrefs({ includeBankrollStart: v })} label="Bankroll de départ" />
-          <Seg small value={axis} onChange={(v) => setPrefs({ bankrollAxis: v })} options={[{ v: "tournaments", l: t("Tournois") }, { v: "date", l: t("Date") }]} />
           {onFull && (
-            <button className="pill" onClick={onFull} title={full ? "Réduire" : "Agrandir le graphique"}>
-              <Icon name={full ? "x" : "layers"} size={13} /> {full ? "Réduire" : "Plein écran"}
+            <button className="chart-full static" onClick={onFull} title={full ? "Revenir aux trois panneaux" : "Graphique sur toute la fenêtre"}>
+              <Icon name={full ? "x" : "layers"} size={14} />
             </button>
           )}
         </div>
@@ -84,6 +101,7 @@ export function BankrollTab({ full, onFull }: { full?: boolean; onFull?: () => v
           ) : (
             data && <LineChart x={data.x} series={series} dateAxis={axis === "date"} fmtY={fmtY} notes={notes} xLabel={axis === "date" ? undefined : t("Tournois joués")} yLabel="Profit" />
           )}
+        </div>
         </div>
         <div className="chart-foot">
           <div className="legend">
@@ -97,7 +115,6 @@ export function BankrollTab({ full, onFull }: { full?: boolean; onFull?: () => v
           </div>
         </div>
       </div>
-      {!full && ev && <EventsPanel ev={ev} offset={offset} />}
     </div>
   );
 }
@@ -114,8 +131,7 @@ interface EvItem {
 
 /** Événements marquants, avec trois dispositions au choix. */
 function EventsPanel({ ev, offset }: { ev: NonNullable<BankrollChartData>["events"]; offset: number }) {
-  const { prefs, setPrefs, open } = useApp();
-  const layout = prefs.eventsLayout;
+  const { open } = useApp();
   const items: EvItem[] = [
     { icon: "sparkle", label: "Plus gros upswing", value: money(ev.upswing.amount), tone: "pos", sub: `${ev.upswing.to - ev.upswing.from} spins` },
     { icon: "thumbdown", label: "Plus gros downswing", value: money(-ev.downswing.amount), tone: "neg", sub: `${ev.downswing.to - ev.downswing.from} spins` },
@@ -140,51 +156,17 @@ function EventsPanel({ ev, offset }: { ev: NonNullable<BankrollChartData>["event
         onClick: () => open({ type: "tournament", id: j.tid }),
       })),
   ];
-  const hero = items.slice(0, 3);
-  const rest = items.slice(3);
   return (
-    <div className="ev-wrap">
-      <div className="ev-head">
-        <h3>Événements marquants</h3>
-        <Help text="Ces repères sont aussi tracés directement sur la courbe. La disposition choisie est conservée." />
-        <div className="grow" />
-        <Seg
-          small
-          value={layout}
-          onChange={(v) => setPrefs({ eventsLayout: v })}
-          options={[
-            { v: "vedette", l: "Vedette" },
-            { v: "compact", l: "Compact" },
-            { v: "liste", l: "Liste" },
-          ]}
-        />
+    <div className="ev-side">
+      <div className="row gap8">
+        <div className="pane-title">Événements marquants</div>
+        <Help text="Ces repères sont aussi tracés sur la courbe (bouton « Événements » à gauche). Clique un jackpot pour ouvrir le tournoi." />
       </div>
-      {layout === "vedette" ? (
-        <div className="ev-hero-wrap">
-          <div className="ev-hero">
-            {hero.map((i) => (
-              <EvCard key={i.label} {...i} big />
-            ))}
-          </div>
-          <div className="ev-mini">
-            {rest.map((i) => (
-              <EvCard key={i.label + i.sub} {...i} mini />
-            ))}
-          </div>
-        </div>
-      ) : layout === "liste" ? (
-        <div className="ev-list">
-          {items.map((i) => (
-            <EvCard key={i.label + i.sub} {...i} mini />
-          ))}
-        </div>
-      ) : (
-        <div className="ev-strip">
-          {items.map((i) => (
-            <EvCard key={i.label + i.sub} {...i} />
-          ))}
-        </div>
-      )}
+      <div className="ev-list">
+        {items.map((i) => (
+          <EvCard key={i.label + i.sub} {...i} mini />
+        ))}
+      </div>
     </div>
   );
 }

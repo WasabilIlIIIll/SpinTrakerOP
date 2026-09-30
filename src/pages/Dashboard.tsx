@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { useApp, useQuery } from "../lib/state";
 import { KpiRow } from "../components/KpiRow";
@@ -16,6 +16,15 @@ export function Dashboard() {
   const { data: s } = useQuery(["summary", filter], () => api.summary(filter));
   const tab = prefs.dashboardTab;
   const [full, setFull] = useState(false);
+  // plein écran : le graphique prend toute la fenêtre, panneaux latéraux masqués
+  useEffect(() => {
+    const root = document.documentElement;
+    if (full && tab !== "stats") root.dataset.focus = "on";
+    else delete root.dataset.focus;
+    return () => {
+      delete root.dataset.focus;
+    };
+  }, [full, tab]);
   if (overview && overview.tournaments === 0) {
     return (
       <div className="page">
@@ -59,7 +68,7 @@ export function Dashboard() {
           ))}
         </div>
       </PaneTop>
-      <div className="dash-body" key={tab}>
+      <div className={cls("dash-body", tab !== "stats" && "dash-fill")} key={tab}>
         {tab === "chips" && <ChipsTab full={full} onFull={() => setFull(!full)} />}
         {tab === "bankroll" && <BankrollTab full={full} onFull={() => setFull(!full)} />}
         {tab === "stats" && <StatsTab />}

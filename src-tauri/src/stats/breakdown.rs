@@ -57,24 +57,39 @@ pub fn by_position(s: &Store, f: &Filter, per: &str) -> Vec<Bar> {
         .collect()
 }
 
-fn primary_tag(s: &Store, name: &str) -> String {
-    let tags = s.tags_of(name);
+/// Profil d'un adversaire : membre du groupe choisi, sinon premier des tags retenus (dans
+/// l'ordre des réglages) qu'il porte, sinon « Autre ».
+fn profile_of(s: &Store, name: &str, tags: &[String], group: &[String], group_name: &str) -> String {
+    if group.iter().any(|g| g == name) {
+        return group_name.to_string();
+    }
+    let has = s.tags_of(name);
     for td in &s.settings.tags {
-        if td.active && tags.contains(&td.id) {
+        if td.active && tags.contains(&td.id) && has.contains(&td.id) {
             return td.name.clone();
         }
     }
-    "?".into()
+    "Autre".into()
 }
 
-pub fn by_profile(s: &Store, f: &Filter) -> Vec<Bar> {
+/// CEV selon le profil des deux adversaires. Par défaut : Reg / Fish (fish + fish,
+/// fish + reg, reg + reg). `tags` choisit les tags pris en compte, `group` isole des joueurs
+/// précis (un seul joueur : son pseudo ; plusieurs : « Groupe »).
+pub fn by_profile(s: &Store, f: &Filter, tags: Option<Vec<String>>, group: Option<Vec<String>>) -> Vec<Bar> {
+    let tags = tags.unwrap_or_else(|| vec!["reg".into(), "fish".into()]);
+    let group = group.unwrap_or_default();
+    let group_name = if group.len() == 1 { group[0].clone() } else { "Groupe".to_string() };
     let sel = f.select(s);
     let mut groups: BTreeMap<String, (Vec<f64>, Vec<f64>, usize)> = BTreeMap::new();
     for &ti in &sel {
         let t = &s.tours[ti];
-        let mut tags: Vec<String> = t.opponents.iter().take(2).map(|o| primary_tag(s, o)).collect();
-        tags.sort();
-        let key = if tags.is_empty() { "?".to_string() } else { tags.join(" + ") };
+        let mut p: Vec<String> = t.opponents.iter().take(2).map(|o| profile_of(s, o, &tags, &group, &group_name)).collect();
+        // avec un groupe, seuls les tournois où il est présent comptent
+        if !group.is_empty() && !p.iter().any(|x| *x == group_name) {
+            continue;
+        }
+        p.sort();
+        let key = if p.is_empty() { "?".to_string() } else { p.join(" + ") };
         let g = groups.entry(key).or_default();
         g.0.push(t.chips);
         g.1.push(t.ev);

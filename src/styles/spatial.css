@@ -260,3 +260,77 @@ html[data-unfold="on"] .topbar { animation: top-in 0.7s 0.2s cubic-bezier(0.2, 0
 .gw-main .gw-top { flex: none; overflow-y: hidden; }
 .center-scroll:has(> .page > .gw-main) { padding: 14px 16px; }
 .page > .gw-main { padding: 10px; }
+
+/* bascules dans le panneau de gauche (ex. Ranges préflop / Trainer) : pleine largeur, parts égales */
+.pane-left .pane-slot > .seg { display: flex; width: 100%; box-sizing: border-box; }
+.pane-left .pane-slot > .seg button { flex: 1 1 0; min-width: 0; text-align: center; justify-content: center; white-space: nowrap; }
+
+/* ---------- trainer ---------- */
+.tr-side > .col { gap: 14px !important; }
+.tr-side .tr-row { grid-template-columns: 1fr; gap: 6px; }
+.tr-side .tr-row > .row, .tr-side .tr-row > .seg { flex-wrap: wrap; }
+.tr-side .tr-keyed { grid-template-columns: 1fr; }
+.tr-side .tr-keyrow { justify-content: space-between; }
+.tr-side .tr-keybox { flex: 0 1 130px; }
+.tr-side .seg-sm { display: flex; }
+.tr-side .seg-sm button { flex: 1; }
+.tr-launch { display: flex; align-items: center; gap: 18px; padding: 18px 20px; border-radius: 22px; background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(255, 255, 255, 0.09); }
+.tr-launch-t { font-family: var(--font-d); font-size: 1.1rem; font-weight: 600; }
+.tr-launch .btn { flex: none; padding: 10px 20px; }
+.tr-revs { display: flex; flex-direction: column; gap: 8px; }
+.tr-rev { display: flex; flex-direction: column; gap: 4px; padding: 10px 11px; border-radius: 14px; background: rgba(255, 255, 255, 0.05); }
+.tr-rev .fchip { align-self: flex-start; margin-top: 3px; }
+.tr-rev-l { font-size: 0.86rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tr-score { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.tr-score .wg-big b { font-size: 1.6rem; }
+.pane-right kbd { background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 6px; padding: 1px 7px; font-family: inherit; font-size: 0.78rem; }
+/* session : les tables prennent tout le panneau central */
+.center-scroll:has(.tr-session) { padding: 14px 16px; }
+.tr-session .tr-area { overflow: hidden; }
+
+/* ---------- tableau de bord : le graphique remplit le panneau central ---------- */
+.center-scroll > .page.dash:has(> .dash-fill) { height: 100%; }
+.page.dash > .dash-fill { flex: 1 1 auto; min-height: 0; }
+.dash-fill > .chart-card, .dash-fill > .br-grid, .dash-fill > .br-grid > .chart-card { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.dash-fill .chart-stage { flex: 1 1 auto; min-height: 280px; display: flex; flex-direction: column; position: relative; }
+.dash-fill .chart-area, .pane .dash-fill .chart-card.with-events .chart-area, .pane .dash-fill .chart-card.full .chart-area { flex: 1 1 auto; height: auto; min-height: 240px; }
+.dash-fill .chart-foot { flex: none; }
+/* fond noir derrière toutes les courbes (chips comme bankroll) */
+.pane .dash-fill .chart-stage { background: rgba(8, 8, 8, 0.78); }
+.chart-full { position: absolute; top: 10px; right: 10px; z-index: 6; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; color: var(--muted); background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1); transition: color 0.15s, background 0.15s; }
+.chart-full.static { position: static; flex: none; }
+.chart-full:hover { color: var(--text); background: rgba(255, 255, 255, 0.14); }
+/* plein écran : panneaux latéraux masqués, le centre prend toute la largeur */
+html[data-focus="on"] .spatial { grid-template-columns: 0 minmax(0, 1fr) 0; column-gap: 0; }
+html[data-focus="on"] .pane-left, html[data-focus="on"] .pane-right { visibility: hidden; }
+/* réglages du graphique dans le panneau de gauche */
+.side-ctl { display: flex; flex-direction: column; gap: 6px; font-size: 0.78rem; color: var(--muted); }
+.side-ctl .seg { display: flex; }
+.side-ctl .seg button { flex: 1; }
+.side-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+/* événements marquants dans le panneau de droite */
+.ev-side { display: flex; flex-direction: column; gap: 6px; padding-top: 6px; }
+.ev-side .ev-list { max-width: none; gap: 1px; }
+.ev-side .ev-item.mini { padding: 6px 6px; }
+.ev-side .ev-item.mini .ev-t { min-width: 0; }
+.ev-side .ev-item.mini .ev-t span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ev-side .ev-item.mini:hover { background: rgba(255, 255, 255, 0.06); }
+/* « Personnaliser » les chiffres clés : discret */
+.dash-kpis .kpi-add { min-height: 0; padding: 7px 10px; border: 0; justify-self: start; display: flex; gap: 6px; align-items: center; font-size: 0.8rem; border-radius: 12px; }
+.dash-kpis .kpi-add:hover { background: rgba(255, 255, 255, 0.06); }
+
+/* ---------- filtres : une page par thème ---------- */
+.fpages { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 18px; min-height: 380px; }
+.fpages-nav { display: flex; flex-direction: column; gap: 2px; padding-right: 14px; border-right: 1px solid rgba(255, 255, 255, 0.08); }
+.fpage { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 12px; color: var(--muted); text-align: left; font-size: 0.9rem; }
+.fpage:hover { background: rgba(255, 255, 255, 0.07); color: var(--text); }
+.fpage.on { background: rgba(255, 255, 255, 0.92); color: #15120f; }
+.fpage span { flex: 1; }
+.fpage .badge { font-size: 0.7rem; }
+.fpages-body { display: flex; flex-direction: column; gap: 18px; animation: page-in 0.3s ease backwards; min-width: 0; }
+.fchip.fc-none:not(.on) { opacity: 0.45; }
+@media (max-width: 800px) { .fpages { grid-template-columns: 1fr; } .fpages-nav { flex-direction: row; flex-wrap: wrap; border-right: 0; padding: 0; } }
+.prof-pick { display: flex; flex-direction: column; gap: 10px; padding: 12px; margin-bottom: 12px; border-radius: 16px; background: rgba(0, 0, 0, 0.2); }
+.fpages-body .fsec { flex: none; display: flex; flex-direction: column; gap: 10px; }
+.fpages-body .fchips { display: flex; flex-wrap: wrap; align-items: center; align-content: flex-start; gap: 7px; }
+.fpages-body .fchip { height: auto; }

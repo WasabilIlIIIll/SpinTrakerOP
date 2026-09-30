@@ -183,7 +183,7 @@ export function KpiRow({ s, compact: small }: { s: Summary | undefined; compact?
       })}
       {!small && (
         <button className="kpi-add" onClick={() => setEdit(true)} title="Personnaliser les indicateurs">
-          <Icon name="settings" size={15} />
+          <Icon name="settings" size={14} /> <span>Personnaliser</span>
         </button>
       )}
       {edit && <KpiEditor onClose={() => setEdit(false)} />}

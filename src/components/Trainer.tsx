@@ -1,11 +1,12 @@
 // Trainer préflop : 1 à 6 tables, spots tirés au hasard parmi les ranges renseignées.
 // Bonne réponse : main suivante. Erreur : la range du spot s'affiche, la main entourée en violet.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "../lib/state";
 import { Btn, Help, Loading, Panel } from "./ui";
 import { HandGrid } from "./HandGrid";
 import { TrainerStats } from "./TrainerStats";
 import { ReviewModal } from "./ReviewModal";
+import { PaneLeft, PaneRight } from "./Spatial";
 import { analyze, linesApi, pendingReview, type Analysis, type Decision, type ReviewEntry } from "../lib/review";
 import { cls, num, realDate } from "../lib/format";
 import {
@@ -291,8 +292,10 @@ export function Trainer({ book }: { book: RangeBook }) {
 
   return (
     <div className="col gap16">
-    <div className="grid2 tr-setup">
-      <Panel title="Nouvelle session">
+      <PaneLeft>
+        <div className="pane-title">Nouvelle session</div>
+        <div className="tr-side">
+
         <div className="col gap16">
           <Row label="Format">
             <div className="seg seg-sm">
@@ -375,19 +378,26 @@ export function Trainer({ book }: { book: RangeBook }) {
             <input type="checkbox" checked={cfg.fewerTrivial} onChange={(e) => setCfg({ fewerTrivial: e.target.checked })} />
             Moins de mains évidentes (folds purs 5 fois moins souvent)
           </label>
-          <div className="row gap12 tr-go">
-            <Btn kind="primary" icon="play" disabled={!pool.length} onClick={() => setRunning(true)}>
-              Lancer ({pool.length} spot{pool.length > 1 ? "s" : ""})
-            </Btn>
-            <span className="muted small">Les raccourcis agissent sur la table sous la souris · touches 1 à 9 = boutons dans l'ordre · Espace = main suivante après une erreur.</span>
-          </div>
+        </div>
+        </div>
+      </PaneLeft>
+      <div className="tr-launch">
+        <div className="col gap6">
+          <b className="tr-launch-t">
+            {FORMATS[cfg.fmt].label} · {useDepths.length ? useDepths.map((d) => fmtBB(d)).join(", ") + " bb" : "aucune profondeur"} · {cfg.tables} table{cfg.tables > 1 ? "s" : ""}
+          </b>
+          <span className="muted small">Raccourcis sur la table sous la souris · touches 1 à 9 = boutons dans l'ordre · Espace = main suivante après une erreur.</span>
           {last && last.n > 0 && (
-            <div className="tr-last">
+            <span className="small">
               Dernière session : <b>{last.n}</b> mains · <b className={last.ok / last.n >= 0.8 ? "pos" : "neg"}>{num((last.ok / last.n) * 100, 0)} %</b> de bonnes réponses
-            </div>
+            </span>
           )}
         </div>
-      </Panel>
+        <div className="grow" />
+        <Btn kind="primary" icon="play" disabled={!pool.length} onClick={() => setRunning(true)}>
+          Lancer ({pool.length} spot{pool.length > 1 ? "s" : ""})
+        </Btn>
+      </div>
       <div className="col gap16">
         <Panel title={`Spots (${pool.length}/${allSpots.length})`} help="Décoche les spots à exclure de l'entraînement.">
           {allSpots.length === 0 ? (
@@ -404,51 +414,40 @@ export function Trainer({ book }: { book: RangeBook }) {
           )}
         </Panel>
       </div>
-    </div>
-      <Panel
-        title="Tes décisions en jeu"
-        help="Tes mains réelles comparées à tes ranges, décision par décision, à la profondeur de range la plus proche du tapis effectif. Chaque import est analysé automatiquement ; tu peux aussi analyser toute ta base."
-        right={
-          <Btn icon="search" onClick={analyseAll} disabled={analysing || loaded === "no"}>
+      <PaneRight>
+        <div className="side-card">
+          <div className="row gap8">
+            <div className="pane-title">Tes décisions en jeu</div>
+            <Help text="Tes mains réelles comparées à tes ranges, décision par décision, à la profondeur de range la plus proche du tapis effectif. Chaque import est analysé automatiquement ; tu peux aussi analyser toute ta base." />
+          </div>
+          <Btn small icon="search" onClick={analyseAll} disabled={analysing || loaded === "no"}>
             {analysing ? "Analyse…" : "Analyser toute ma base"}
           </Btn>
-        }
-      >
-        {!(progress.reviews ?? []).length ? (
-          <div className="muted small">Aucune analyse pour l'instant : importe tes mains, ou analyse toute ta base.</div>
-        ) : (
-          <table className="tbl hover">
-            <thead>
-              <tr>
-                <th>Analyse</th>
-                <th className="r">Décisions</th>
-                <th className="r">Précision</th>
-                <th className="r">Erreurs</th>
-                <th className="r">EV perdue (HU)</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
+          {!(progress.reviews ?? []).length ? (
+            <div className="muted small">Aucune analyse pour l'instant : importe tes mains, ou analyse toute ta base.</div>
+          ) : (
+            <div className="tr-revs">
               {(progress.reviews ?? []).map((r, i) => (
-                <tr key={i}>
-                  <td>
-                    {r.label} <span className="muted small">· {realDate(r.ts)}</span>
-                  </td>
-                  <td className="r">{num(r.decisions)}</td>
-                  <td className={cls("r", r.ok / r.decisions >= 0.85 ? "pos" : "neg")}>{num((r.ok / Math.max(1, r.decisions)) * 100, 0)} %</td>
-                  <td className="r">{num(r.errors.length)}</td>
-                  <td className="r">{r.evLoss > 0 ? `${num(r.evLoss, 2)} bb` : "–"}</td>
-                  <td className="r">
-                    <button className="fchip" disabled={!r.errors.length} onClick={() => startReview(r.errors, `Review : ${r.label}`)}>
+                <div key={i} className="tr-rev">
+                  <div className="row gap8">
+                    <b className="tr-rev-l">{r.label}</b>
+                    <div className="grow" />
+                    <b className={r.ok / r.decisions >= 0.85 ? "pos" : "neg"}>{num((r.ok / Math.max(1, r.decisions)) * 100, 0)} %</b>
+                  </div>
+                  <span className="muted small">
+                    {realDate(r.ts)} · {num(r.decisions)} décisions · {num(r.errors.length)} erreurs{r.evLoss > 0 ? ` · ${num(r.evLoss, 2)} bb perdus` : ""}
+                  </span>
+                  {r.errors.length > 0 && (
+                    <button className="fchip" onClick={() => startReview(r.errors, `Review : ${r.label}`)}>
                       Rejouer les erreurs
                     </button>
-                  </td>
-                </tr>
+                  )}
+                </div>
               ))}
-            </tbody>
-          </table>
-        )}
-      </Panel>
+            </div>
+          )}
+        </div>
+      </PaneRight>
       {analysis && (
         <ReviewModal
           a={analysis}
@@ -655,11 +654,18 @@ function Session({
       const el = area.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
-      setBox({ w: r.width, h: Math.max(200, window.innerHeight - r.top - 14) });
+      // bas du panneau central (moins sa marge intérieure) : les tables tiennent sans défiler
+      const sc = el.closest(".pane-scroll") as HTMLElement | null;
+      const bottom = sc ? sc.getBoundingClientRect().bottom - parseFloat(getComputedStyle(sc).paddingBottom || "0") : window.innerHeight - 14;
+      setBox({ w: r.width, h: Math.max(200, bottom - r.top - 2) });
     };
     measure();
     const ro = new ResizeObserver(measure);
-    if (area.current) ro.observe(area.current);
+    if (area.current) {
+      ro.observe(area.current);
+      const sc = area.current.closest(".pane-scroll");
+      if (sc) ro.observe(sc);
+    }
     window.addEventListener("resize", measure);
     return () => {
       ro.disconnect();
@@ -780,42 +786,56 @@ function Session({
 
   const pct = score.n ? score.ok / score.n : 0;
   return (
-    <div className="col gap8">
-      <div className="tr-head">
-        <div className="tr-kpi">
-          <span>Mains</span>
-          <b>{score.n}</b>
+    <div className="col gap8 tr-session">
+      <PaneRight>
+        <div className="pane-title">Session</div>
+        <div className="tr-score">
+          <div className="wg-big">
+            <span>Mains</span>
+            <b>{score.n}</b>
+          </div>
+          <div className="wg-big">
+            <span>Justes</span>
+            <b className={score.n ? (pct >= 0.8 ? "pos" : "neg") : ""}>{score.n ? `${num(pct * 100, 0)} %` : "–"}</b>
+          </div>
+          <div className="wg-big">
+            <span>Série</span>
+            <b>{score.streak}</b>
+            <small>record {score.best}</small>
+          </div>
         </div>
-        <div className="tr-kpi">
-          <span>Justes</span>
-          <b className={score.n ? (pct >= 0.8 ? "pos" : "neg") : ""}>{score.n ? `${num(pct * 100, 0)} %` : "–"}</b>
-        </div>
-        <div className="tr-kpi">
-          <span>Série</span>
-          <b>{score.streak}</b>
-          <small>record {score.best}</small>
-        </div>
-        {label && (
-          <div className="tr-kpi">
-            <span>Entraînement ciblé</span>
-            <b className="tr-target">{label}</b>
-            <small>{pool.length} spots</small>
+        {score.n > 0 && (
+          <div className="wg-bar">
+            <i style={{ width: `${pct * 100}%`, background: pct >= 0.8 ? "var(--pos)" : "var(--neg)" }} />
           </div>
         )}
-        <div className="tr-keys">
-          {(Object.keys(KEY_LABELS) as KeyAction[])
-            .filter((k) => keys[k])
-            .map((k) => (
-              <span key={k}>
-                <kbd>{keyName(keys[k])}</kbd> {KEY_LABELS[k]}
-              </span>
-            ))}
+        {label && (
+          <div className="side-card">
+            <span className="muted small">Entraînement ciblé</span>
+            <b>{label}</b>
+            <span className="muted small">{pool.length} spots</span>
+          </div>
+        )}
+        <div className="side-card">
+          <div className="pane-title">Raccourcis</div>
+          <div className="side-kv">
+            {(Object.keys(KEY_LABELS) as KeyAction[])
+              .filter((k) => keys[k])
+              .map((k) => (
+                <Fragment key={k}>
+                  <span>{KEY_LABELS[k]}</span>
+                  <b>
+                    <kbd>{keyName(keys[k])}</kbd>
+                  </b>
+                </Fragment>
+              ))}
+          </div>
+          <span className="muted small">Touches 1 à 9 = boutons dans l'ordre · Espace = main suivante.</span>
         </div>
-        <div className="grow" />
         <Btn icon="x" onClick={() => onStop({ n: score.n, ok: score.ok })}>
-          Terminer
+          Terminer la session
         </Btn>
-      </div>
+      </PaneRight>
       {reviewDone && (
         <div className="tr-done">
           <b>Review terminée</b>

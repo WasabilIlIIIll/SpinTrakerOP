@@ -43,7 +43,7 @@ function ChallengeWidget() {
             <i style={{ width: `${Math.min(100, c.progress * 100)}%`, background: c.challenge.color || "var(--accent)" }} />
           </div>
           <small>
-            {num(c.value, 0)} / {num(c.challenge.target, 0)} · {c.days_left} j restants
+            {num(c.value, 0)} / {num(c.challenge.target, 0)} · {num(Math.max(0, c.days_left), 0)} j restants
           </small>
         </div>
       ))}
