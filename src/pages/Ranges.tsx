@@ -6,6 +6,7 @@ import { Btn, Help, Modal, Seg } from "../components/ui";
 import { HandGrid } from "../components/HandGrid";
 import { Trainer } from "../components/Trainer";
 import { pendingReview } from "../lib/review";
+import { PaneLeft, PaneRight } from "../components/Spatial";
 import { cls, num } from "../lib/format";
 import { gridToString, stringToGrid } from "../lib/solver";
 import {
@@ -70,8 +71,8 @@ export function RangesPage() {
   const { book, update } = useRangeBook();
   return (
     <div className="page">
-      <div className="page-head">
-        <h2>Ranges</h2>
+      <PaneLeft>
+        <div className="pane-title">Ranges</div>
         <Seg
           value={tab}
           onChange={setTab}
@@ -81,7 +82,7 @@ export function RangesPage() {
           ]}
         />
         {book && <BookMenu book={book} update={update} />}
-      </div>
+      </PaneLeft>
       {!book ? null : tab === "ranges" ? <RangeView book={book} update={update} /> : <Trainer book={book} />}
     </div>
   );
@@ -152,32 +153,6 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
   const [paste, setPaste] = useState<number | null>(null);
   const compare = !!prefs.rangesCompare && !edit;
   const [vsPick, setVsPick] = useState<number | null>(null);
-  // largeur de la zone des grilles, retenue séparément en vue simple et en comparaison
-  const savedSplit = compare ? prefs.rangesSplitCmp ?? 64 : prefs.rangesSplit ?? 46;
-  const [split, setSplit] = useState<number>(savedSplit);
-  useEffect(() => setSplit(savedSplit), [compare]); // eslint-disable-line react-hooks/exhaustive-deps
-  const body = useRef<HTMLDivElement>(null);
-  // poignée entre la grille et le panneau de droite : la grille garde des cases carrées
-  const startSplit = (e: React.MouseEvent) => {
-    e.preventDefault();
-    const el = body.current;
-    if (!el) return;
-    let last = split;
-    const move = (ev: MouseEvent) => {
-      const r = el.getBoundingClientRect();
-      last = Math.max(30, Math.min(80, ((ev.clientX - r.left) / r.width) * 100));
-      setSplit(last);
-    };
-    const up = () => {
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("mouseup", up);
-      document.body.classList.remove("resizing");
-      setPrefs(compare ? { rangesSplitCmp: Math.round(last * 10) / 10 } : { rangesSplit: Math.round(last * 10) / 10 });
-    };
-    document.body.classList.add("resizing");
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", up);
-  };
   const db = findBook(book, fmt, depth);
   const sizes: TreeSizes = db?.sizes ?? defaultSizes(fmt);
   const pos = FORMATS[fmt].pos;
@@ -301,9 +276,11 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
   const di = depthList.indexOf(depth);
 
   return (
-    <div className="gw">
-      <div className="gw-top">
-        <div className="gw-tile gw-spot">
+    <div className="gw gw-main">
+      <PaneLeft>
+        <div className="pane-title">Spot</div>
+        <div className="gw gw-side gw-ctl">
+<div className="gw-ctl">
           <div className="gw-t">
             {FORMATS[fmt].short} <span>{pos.map(() => fmtBB(depth)).join("-")}bb</span>
           </div>
@@ -333,6 +310,17 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
             ⚙ Tailles
           </button>
         </div>
+          <div className="gw-src">
+            {db?.source
+              ? `Ranges importées : ${db.source} (${db.mixed ? "grille : fréquences exactes et poids de chaque main" : "grille : action dominante de chaque main"} ; pourcentages : fréquences du solveur)`
+              : "Ranges personnelles"} · {FORMATS[fmt].label} · tapis {fmtBB(depth)} bb symétriques ·{" "}
+            {sizes.explicit
+              ? `arbre du fichier (${Object.keys(sizes.explicit).length} spots, tailles propres à chaque spot)`
+              : `open ${Object.entries(sizes.open).map(([p, v]) => `${p} ${fmtBB(v)}`).join(", ")} · 3-bet ${fmtBB(sizes.threeBet)}× · au-delà de ${sizes.maxRaises} relances ou ${num(sizes.maxRaiseFrac * 100, 0)} % du tapis : tapis seulement`}
+          </div>
+        </div>
+      </PaneLeft>
+      <div className="gw-top">
         {history.map((id, k) => {
           const s = r.states[k];
           return (
@@ -383,7 +371,7 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
       </div>
 
       {spot && (
-        <div className="gw-body" ref={body} style={{ ["--split" as string]: `${split}%` }}>
+        <>
           <div className="gw-panel gw-left">
             <div className="gw-tabs">
               <button className={cls(!edit && !compare && "on")} onClick={() => (setEdit(false), setPrefs({ rangesCompare: false }))}>
@@ -524,8 +512,12 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
                 Ce spot n'a pas encore de range. Clique sur <b>✎ Modifier</b> pour la peindre ou la coller, ou importe un fichier de ranges.
               </div>
             )}
-            {shown != null && (
-              <div className="gw-cellinfo">
+            <div className="gw-cellinfo">
+              {shown == null ? (
+                <span className="gw-mut">Survole une main de la grille pour voir sa stratégie, clique pour filtrer le tableau à droite.</span>
+              ) : (
+                <>
+                <div>
                 <b>{cellName(shown)}</b> · {cellCombos(shown)} combos · atteinte {num(reach[shown] * 100, 0)} %
                 {evOf(shown) && <b className={(evOf(shown)![0] ?? 0) >= 0 ? "gw-pos" : "gw-neg"}> · EV {num(evOf(shown)![0], 2)} bb</b>}
                 {compare && vs >= 0 && vsRange && (
@@ -534,6 +526,7 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
                     · {pos[vs]} {vsAct ? vsAct.label : ""} : {vsRange[shown] > 0.001 ? `${num(vsRange[shown] * 100, 0)} %` : "hors range"}
                   </span>
                 )}
+                </div>
                 <div className="gw-sbar wide">
                   {view[shown].map((f, i) => (f > 0.002 ? <i key={i} style={{ width: `${f * 100}%`, background: colors[i] }} /> : null))}
                 </div>
@@ -546,11 +539,12 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
                     </span>
                   ))}
                 </div>
-              </div>
-            )}
+                </>
+              )}
+            </div>
           </div>
-          <div className="gw-split" onMouseDown={startSplit} title="Glisser pour agrandir ou réduire la grille" />
-          <div className="gw-right">
+          <PaneRight>
+          <div className="gw gw-side">
             <div className="gw-boxes">
               {acts.map((a, i) => (
                 <div key={a.id} className="gw-box" style={{ background: colors[i], flexGrow: 1 }}>
@@ -632,16 +626,9 @@ function RangeView({ book, update }: { book: RangeBook; update: (b: RangeBook, n
               </div>
             </div>
           </div>
-        </div>
+          </PaneRight>
+        </>
       )}
-      <div className="gw-src">
-        {db?.source
-          ? `Ranges importées : ${db.source} (${db.mixed ? "grille : fréquences exactes et poids de chaque main" : "grille : action dominante de chaque main"} ; pourcentages : fréquences du solveur)`
-          : "Ranges personnelles"} · {FORMATS[fmt].label} · tapis {fmtBB(depth)} bb symétriques ·{" "}
-        {sizes.explicit
-          ? `arbre du fichier (${Object.keys(sizes.explicit).length} spots, tailles propres à chaque spot)`
-          : `open ${Object.entries(sizes.open).map(([p, v]) => `${p} ${fmtBB(v)}`).join(", ")} · 3-bet ${fmtBB(sizes.threeBet)}× · au-delà de ${sizes.maxRaises} relances ou ${num(sizes.maxRaiseFrac * 100, 0)} % du tapis : tapis seulement`}
-      </div>
       {paste != null && spot && <PasteModal action={acts[paste].label} initial={gridToString(view.map((row) => row[paste]))} onClose={() => setPaste(null)} onApply={(t) => applyText(paste, t)} />}
       {sizesOpen && (
         <SizesModal

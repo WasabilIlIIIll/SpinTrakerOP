@@ -163,6 +163,11 @@ pub fn run() {
             let state = open_state(&dir).map_err(|e| Box::<dyn std::error::Error>::from(e))?;
             let (store, dbc, ready) = (state.store.clone(), state.db.clone(), state.ready.clone());
             app.manage(state);
+            // fenêtre transparente posée sur le bureau : placée puis montée (évite un flash)
+            if let Some(w) = app.get_webview_window("main") {
+                desktop::place_window(&w);
+                let _ = w.show();
+            }
             let handle = app.handle().clone();
             std::thread::spawn(move || {
                 let mut s = store::Store::default();
@@ -220,6 +225,7 @@ pub fn run() {
             commands::scenarios,
             commands::preflop_lines,
             desktop::desktop_wallpaper,
+            desktop::window_toggle_fill,
             ranges::ranges_load,
             ranges::ranges_save,
             ranges::ranges_export,
@@ -260,6 +266,11 @@ pub fn run() {
             // jamais plus de 2 s qu'un autre traitement libère la base : sinon le programme
             // resterait en mémoire, sans fenêtre (chaque écriture est de toute façon déjà
             // enregistrée dans le journal de la base).
+            if let tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::CloseRequested { .. }, .. } = &event {
+                if let Some(w) = handle.get_webview_window(label) {
+                    desktop::save_window(&w);
+                }
+            }
             if let tauri::RunEvent::Exit = event {
                 if let Some(state) = handle.try_state::<AppState>() {
                     if let Some(db) = state.db.try_lock_for(std::time::Duration::from_secs(2)) {

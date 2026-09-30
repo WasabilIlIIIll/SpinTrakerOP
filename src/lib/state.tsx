@@ -44,7 +44,31 @@ export interface UiPrefs {
   rangesSplitCmp?: number;
   /** réglages du trainer (voir components/Trainer.tsx) */
   trainer?: Record<string, unknown>;
+  /** disposition de la coque : largeurs des panneaux, verre, inclinaison, animations */
+  layout?: Partial<Layout>;
+  /** blocs des panneaux latéraux, par page et par côté */
+  sideWidgets?: Record<string, Partial<Record<"left" | "right", string[]>>>;
 }
+
+export interface Layout {
+  /** largeur des panneaux latéraux, en % de la fenêtre */
+  left: number;
+  right: number;
+  /** opacité du verre (0.2 = très transparent, 0.95 = presque opaque) */
+  glass: number;
+  /** panneaux latéraux inclinés vers soi */
+  tilt: boolean;
+  /** redressement au survol */
+  hover: boolean;
+  /** dépliage des panneaux à l'ouverture */
+  openAnim: boolean;
+  /** marge autour des panneaux (% de la fenêtre) */
+  gap: number;
+}
+
+export const DEFAULT_LAYOUT: Layout = { left: 17, right: 18, glass: 0.62, tilt: true, hover: true, openAnim: true, gap: 2.2 };
+
+export const layoutOf = (p: UiPrefs): Layout => ({ ...DEFAULT_LAYOUT, ...(p.layout ?? {}) });
 
 export const ALL_KPIS = ["tournaments", "cev", "rakeback", "profit", "roi", "hourly", "time", "luck", "finish", "avg_buyin", "spins_h", "min_cev"];
 export const ALL_STATS_SECTIONS = ["tiles", "position", "sessions", "results", "multipliers", "multitabling", "finishers", "profile", "stack", "hours", "weekdays"];
@@ -179,6 +203,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     root.dataset.density = "cozy";
     root.dataset.anim = "on";
   }, [prefs.lang, prefs.currency]);
+
+  // disposition de la coque, appliquée en variables CSS
+  useEffect(() => {
+    const l = layoutOf(prefs);
+    const root = document.documentElement;
+    root.style.setProperty("--pane-left", `${l.left}vw`);
+    root.style.setProperty("--pane-right", `${l.right}vw`);
+    root.style.setProperty("--glass", String(l.glass));
+    root.style.setProperty("--shell-gap", `${l.gap}vw`);
+    root.dataset.tilt = l.tilt ? "on" : "off";
+    root.dataset.hover = l.hover ? "on" : "off";
+    root.dataset.unfold = l.openAnim ? "on" : "off";
+  }, [prefs.layout]);
 
   // attente du chargement de la base
   useEffect(() => {

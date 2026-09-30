@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { api, type MultTable, type Settings as S } from "../lib/api";
-import { ALL_STATS_SECTIONS, useApp, DEFAULT_PREFS, clearCache } from "../lib/state";
+import { ALL_STATS_SECTIONS, useApp, DEFAULT_PREFS, DEFAULT_LAYOUT, layoutOf, clearCache, type Layout } from "../lib/state";
+import { WIDGETS } from "../components/SideWidgets";
 import { Btn, NumInput, Panel, Seg, Toggle, Modal } from "../components/ui";
 import { Icon } from "../components/Icon";
 import { cls, date, money, num, nowNaive } from "../lib/format";
@@ -21,7 +22,7 @@ const SECTION_NAMES: Record<string, string> = {
 };
 
 export function SettingsPage() {
-  const [tab, setTab] = useState<"look" | "calc" | "mult" | "data">("look");
+  const [tab, setTab] = useState<"look" | "layout" | "calc" | "mult" | "data">("look");
   return (
     <div className="page">
       <div className="page-head">
@@ -31,6 +32,7 @@ export function SettingsPage() {
           onChange={setTab}
           options={[
             { v: "look", l: "Général" },
+            { v: "layout", l: "Disposition" },
             { v: "calc", l: "Calculs" },
             { v: "mult", l: "Multiplicateurs" },
             { v: "data", l: "Données" },
@@ -38,6 +40,7 @@ export function SettingsPage() {
         />
       </div>
       {tab === "look" && <Look />}
+      {tab === "layout" && <LayoutPrefs />}
       {tab === "calc" && <Calc />}
       {tab === "mult" && <Mults />}
       {tab === "data" && <Data />}
@@ -87,6 +90,86 @@ function Look() {
         >
           Rétablir l'affichage par défaut
         </Btn>
+      </Panel>
+    </>
+  );
+}
+
+function Slider({ label, value, min, max, step, unit, onChange }: { label: string; value: number; min: number; max: number; step: number; unit: string; onChange: (v: number) => void }) {
+  return (
+    <label className="lay-sl">
+      <span>{label}</span>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(+e.target.value)} />
+      <b>
+        {num(value, step < 1 ? 1 : 0)}
+        {unit}
+      </b>
+    </label>
+  );
+}
+
+const PAGE_NAMES: Record<string, string> = {
+  dashboard: "Tableau de bord",
+  tournaments: "Tournois",
+  hands: "Mains",
+  players: "Joueurs",
+  leaks: "Leak finder",
+  ranges: "Ranges",
+  challenges: "Challenges",
+  import: "Import",
+  settings: "Paramètres",
+};
+
+function LayoutPrefs() {
+  const { prefs, setPrefs } = useApp();
+  const l = layoutOf(prefs);
+  const set = (p: Partial<Layout>) => setPrefs({ layout: { ...l, ...p } });
+  const custom = Object.entries(prefs.sideWidgets ?? {});
+  return (
+    <>
+      <Panel title="Panneaux" help="Largeur des panneaux de gauche et de droite (en % de la fenêtre) : le panneau central prend le reste.">
+        <div className="lay-grid">
+          <Slider label="Panneau de gauche" value={l.left} min={12} max={26} step={0.5} unit=" %" onChange={(v) => set({ left: v })} />
+          <Slider label="Panneau de droite" value={l.right} min={12} max={28} step={0.5} unit=" %" onChange={(v) => set({ right: v })} />
+          <Slider label="Marge autour" value={l.gap} min={0.6} max={5} step={0.1} unit=" %" onChange={(v) => set({ gap: v })} />
+          <Slider label="Opacité du verre" value={Math.round(l.glass * 100)} min={20} max={96} step={1} unit=" %" onChange={(v) => set({ glass: v / 100 })} />
+        </div>
+      </Panel>
+      <Panel title="Animations">
+        <div className="col gap12">
+          <Toggle on={l.tilt} onChange={(v) => set({ tilt: v })} label="Panneaux latéraux inclinés vers moi" />
+          <Toggle on={l.hover} onChange={(v) => set({ hover: v })} label="Se redressent quand la souris passe dessus" />
+          <Toggle on={l.openAnim} onChange={(v) => set({ openAnim: v })} label="Se déplient à l'ouverture de l'application" />
+        </div>
+      </Panel>
+      <Panel title="Blocs des panneaux" help="Chaque page a ses propres blocs à gauche et à droite : « Ajouter un bloc » en bas d'un panneau, glisser pour réordonner, l'œil pour flouter, la croix pour retirer.">
+        {custom.length === 0 ? (
+          <div className="muted small">Aucune page personnalisée : blocs par défaut partout.</div>
+        ) : (
+          <div className="col gap8">
+            {custom.map(([page, sides]) => (
+              <div key={page} className="row gap12 wrap small">
+                <b style={{ minWidth: 130 }}>{PAGE_NAMES[page] ?? page}</b>
+                <span className="muted">
+                  {(["left", "right"] as const)
+                    .filter((k) => sides?.[k])
+                    .map((k) => `${k === "left" ? "gauche" : "droite"} : ${sides![k]!.map((w) => WIDGETS[w]?.title ?? w).join(", ") || "aucun"}`)
+                    .join(" · ")}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
+      <Panel title="Réinitialisation">
+        <div className="row gap8 wrap">
+          <Btn icon="refresh" onClick={() => setPrefs({ layout: { ...DEFAULT_LAYOUT } })}>
+            Disposition par défaut
+          </Btn>
+          <Btn icon="refresh" onClick={() => window.confirm("Remettre les blocs par défaut sur toutes les pages ?") && setPrefs({ sideWidgets: {} })}>
+            Blocs par défaut
+          </Btn>
+        </div>
       </Panel>
     </>
   );

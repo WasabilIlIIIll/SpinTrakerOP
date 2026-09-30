@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { api, type TagDef, type TagRule } from "../lib/api";
+import { Fragment, useState } from "react";
+import { api, type PlayerRow, type TagDef, type TagRule } from "../lib/api";
+import { PaneLeft, PaneRight } from "../components/Spatial";
 import { useApp, useQuery } from "../lib/state";
 import { Btn, Empty, Loading, Modal, Pager, Panel, Priv, Seg, TagChip, Tags, Toggle, NumInput } from "../components/ui";
 import { Icon, TAG_ICONS } from "../components/Icon";
@@ -63,6 +64,7 @@ function PlayerList() {
   const limit = 100;
   const q = { search, tag, min_hands: minHands, sort, desc, offset, limit };
   const { data, loading } = useQuery(["players", q], () => api.players(q));
+  const [hover, setHover] = useState<PlayerRow | null>(null);
   const click = (k: string) => {
     if (k === sort) setDesc(!desc);
     else {
@@ -73,8 +75,15 @@ function PlayerList() {
   };
   return (
     <>
-      <div className="hand-filters">
-        <input className="inp" placeholder="Rechercher un joueur…" value={search} onChange={(e) => (setSearch(e.target.value), setOffset(0))} style={{ width: 220 }} />
+      <PaneLeft>
+        <div className="pane-title">Recherche</div>
+        <div className="side-filters">
+          <input className="inp" placeholder="Rechercher un joueur…" value={search} onChange={(e) => (setSearch(e.target.value), setOffset(0))} />
+          <label className="row gap8 small muted">
+            Mains min <NumInput value={minHands} width={70} min={0} onChange={setMinHands} />
+          </label>
+        </div>
+        <div className="pane-title">Tags</div>
         <div className="fchips">
           <button className={cls("fchip", !tag && "on")} onClick={() => setTag(null)}>
             Tous
@@ -85,12 +94,11 @@ function PlayerList() {
             </button>
           ))}
         </div>
-        <label className="row gap8 small muted">
-          Mains min <NumInput value={minHands} width={60} min={0} onChange={setMinHands} />
-        </label>
-        <div className="grow" />
-        <span className="muted small">{num(data?.total ?? 0)} joueurs</span>
-      </div>
+        <div className="muted small">{num(data?.total ?? 0)} joueurs</div>
+      </PaneLeft>
+      <PaneRight>
+        <PlayerCard p={hover} />
+      </PaneRight>
       <Panel pad={false} right={<Pager total={data?.total ?? 0} offset={offset} limit={limit} onChange={setOffset} />}>
         {loading && !data ? (
           <Loading />
@@ -113,7 +121,7 @@ function PlayerList() {
               </thead>
               <tbody>
                 {data.rows.map((p) => (
-                  <tr key={p.name} onClick={() => open({ type: "player", name: p.name })}>
+                  <tr key={p.name} onClick={() => open({ type: "player", name: p.name })} onMouseEnter={() => setHover(p)}>
                     <td>
                       <b>{p.name}</b>
                     </td>
@@ -319,5 +327,54 @@ function TagEditor({ tag, onClose, onSave }: { tag: TagDef; onClose: () => void;
         </div>
       </div>
     </Modal>
+  );
+}
+
+/** Joueur survolé : son profil en bref dans le panneau de droite. */
+function PlayerCard({ p }: { p: PlayerRow | null }) {
+  if (!p) return <div className="side-card side-hint">Survole un joueur pour voir son profil ici, clique pour ouvrir sa fiche.</div>;
+  const kv: [string, string, string?][] = [
+    ["Mains", num(p.hands)],
+    ["Spins ensemble", num(p.vs_hero_tournaments)],
+    ["Tête-à-tête", num(p.hu_matches)],
+    ["VPIP", pct(p.vpip, 0)],
+    ["PFR", pct(p.pfr, 0)],
+    ["Limp BTN", pct(p.limp_btn, 0)],
+    ["Shove BTN", pct(p.shove_btn, 0)],
+    ["3-bet", pct(p.threebet, 0)],
+    ["Call vs shove BB", pct(p.call_shove_bb, 0)],
+    ["AF", num(p.af, 1)],
+    ["WTSD", pct(p.wtsd, 0)],
+  ];
+  return (
+    <div className="side-card" key={p.name}>
+      <div className="row gap8 wrap">
+        <b style={{ fontSize: "1.05rem" }}>{p.name}</b>
+        <Tags ids={p.tags} small />
+        <div className="grow" />
+        <span className="muted small">vu {ago(p.last_ts)}</span>
+      </div>
+      <div className="wg-2">
+        <div className="wg-big">
+          <span>CEV HU contre lui</span>
+          <b className={tone(p.cev_hu_vs)}>{p.hu_matches ? num(p.cev_hu_vs, 0) : "–"}</b>
+        </div>
+        <div className="wg-big">
+          <span>Profit HU</span>
+          <b className={tone(p.hero_profit_hu_vs)}>
+            <Priv k="profit">{p.hu_matches ? money(p.hero_profit_hu_vs) : "–"}</Priv>
+          </b>
+        </div>
+      </div>
+      <div className="side-kv">
+        {kv.map(([l, v]) => (
+          <Fragment key={l}>
+            <span>{l}</span>
+            <b>{v}</b>
+          </Fragment>
+        ))}
+      </div>
+      {p.notes && <div className="muted small">{p.notes}</div>}
+    </div>
   );
 }

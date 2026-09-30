@@ -15,18 +15,27 @@ panneau central et deux panneaux latéraux inclinés).
 
 ## Coque « Spatial »
 
-- Décor : salle de poker chaude et floue (lampe, fenêtre, table de feutre au sol, lumières qui
-  dérivent lentement). Fabriqué en CSS, aucune image sous droits.
-- Trois panneaux de verre dépoli (flou d'arrière-plan, liseré lumineux) :
+- **Posée sur le bureau** : fenêtre Windows réellement transparente et sans cadre ; on voit le
+  vrai bureau autour et entre les panneaux. Le verre est fumé (WebView2 ne peut pas flouter les
+  autres fenêtres), son opacité se règle.
+- **Barre du haut** (au-dessus du panneau central) : titre de la page, contenu propre à la page
+  (ex. bulle Chips gagnés / Bankroll / Stats), boutons − □ ×. On la tire pour déplacer la
+  fenêtre, double-clic ou □ = plein écran de travail ↔ 80 % centré. Bords de la fenêtre
+  redimensionnables. Position et taille mémorisées (`fenetre.json`).
+- Trois panneaux de verre :
   - **gauche** : marque, navigation, puis les filtres et réglages propres à la page ;
-  - **centre** : le contenu principal de la page ;
-  - **droite** : les chiffres et détails de la page (par défaut : résumé des chiffres clés).
-- Les panneaux latéraux sont inclinés vers l'utilisateur (14°) et se redressent au survol.
-- Animations d'arrivée : le centre apparaît, puis les côtés pivotent en place ; changement de page
-  en fondu glissé.
-- Fenêtres et menus en verre fumé au-dessus des panneaux.
-- Écrans < 1200 px : panneau de droite replié ; < 1500 px : panneaux plus étroits.
-- Plus tard : panneaux détachables, déplaçables et redimensionnables, disposition mémorisée.
+  - **centre** : le contenu principal de la page, qui défile à l'intérieur du panneau (jamais
+    sous la barre des tâches) ;
+  - **droite** : le détail propre à la page (ligne survolée, chiffres de la sélection…).
+- **Blocs libres** sous le contenu de chaque panneau latéral, **par page** : Résumé, CEV,
+  Profits, Volume, Challenge en cours (ex. 244 / 4000 · 6 %), Trainer, Précision en jeu. Ajouter,
+  glisser pour réordonner, œil pour flouter, croix pour retirer.
+- **Paramètres › Disposition** : largeur des panneaux gauche et droite, marge, opacité du verre ;
+  inclinaison, redressement au survol et dépliage à l'ouverture activables un par un.
+- Animations : le centre apparaît, puis les côtés se déplient depuis l'arrière du centre ;
+  changement de page en fondu glissé.
+- Graphiques sur fond sombre, lisibles quel que soit le fond d'écran.
+- Fenêtre < 1150 px : panneau de droite replié.
 
 ## Pages en trois segments
 
@@ -34,9 +43,10 @@ panneau central et deux panneaux latéraux inclinés).
 |---|---|---|---|
 | Tableau de bord | Filtres | Bulle Chips gagnés / Bankroll / Stats + graphique | Indicateurs (tournois, CEV, rakeback, EV profit…) |
 | Stats | Choix des blocs, filtres | Blocs de stats | Détail du bloc survolé |
-| Tournois / Mains | Filtres de liste | Liste | Détail de la ligne choisie (replayer compact) |
-| Joueurs | Recherche, tags | Liste des adversaires | Fiche du joueur (HU, notes) |
-| Ranges | Spot : format, profondeur, coup | Grille (ou comparaison) | Actions, mains, EV |
+| Tournois | Filtres | Liste | Tournoi survolé, chiffres de la sélection — **fait** |
+| Mains | Filtres, filtres de main | Liste | Main survolée (cartes, ligne, CEV), totaux — **fait** |
+| Joueurs | Recherche, tags | Liste des adversaires | Joueur survolé (HU, stats, notes) — **fait** |
+| Ranges | Onglets, import/export, spot : format, profondeur, tailles | Coup, grille (ou comparaison) | Actions, mains, EV — **fait** |
 | Trainer | Réglages de session | Tables | Score, précision, raccourcis |
 | Leak finder | Situations, filtres | Arbre de décision / grille | Stats du nœud choisi |
 | Challenges | Liste | Challenge choisi | Rythme, progression |

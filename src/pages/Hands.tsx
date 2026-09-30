@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { api } from "../lib/api";
+import { api, type HandRow } from "../lib/api";
 import { useApp, useQuery } from "../lib/state";
 import { Btn, Empty, Help, Loading, Pager, Panel, Seg } from "../components/ui";
 import { Icon } from "../components/Icon";
 import { FilterBar } from "../components/FilterBar";
 import { Cards } from "../components/PlayingCard";
 import { cls, date, num, signed, tone } from "../lib/format";
+import { PaneLeft, PaneRight } from "../components/Spatial";
 
 const SCENARIOS = ["BTN", "SB vs BTN", "SB vs BB", "BB vs BTN", "BB vs SB", "HU SB", "HU BB"];
 
@@ -39,6 +40,7 @@ export function Hands() {
     limit,
   };
   const { data, loading } = useQuery(["hands", q], () => api.hands(q));
+  const [hover, setHover] = useState<HandRow | null>(null);
   const click = (k: string) => {
     if (k === sort) setDesc(!desc);
     else {
@@ -65,11 +67,11 @@ export function Hands() {
   };
   return (
     <div className="page">
-      <div className="page-head">
-        <h2>Mains</h2>
+      <PaneLeft>
+        <div className="pane-title">Sélection</div>
         <FilterBar />
-      </div>
-      <div className="hand-filters">
+        <div className="pane-title">Mains</div>
+        <div className="side-filters">
         <select className="sel" value={scenario ?? ""} onChange={(e) => (setScenario(e.target.value || null), setOffset(0))}>
           <option value="">Toutes positions</option>
           {SCENARIOS.map((s) => (
@@ -88,33 +90,43 @@ export function Hands() {
           onChange={(v) => (setFavorites(v === "" ? null : v === "y"), setOffset(0))}
           options={[{ v: "", l: "Toutes" }, { v: "y", l: "★ Review" }]}
         />
-        <input className="inp" placeholder="Main (AKs, 77…)" value={combo} onChange={(e) => (setCombo(e.target.value), setOffset(0))} style={{ width: 120 }} />
-        <input className="inp" placeholder="Pot min (bb)" value={minPot ?? ""} onChange={(e) => setMinPot(e.target.value ? +e.target.value : null)} style={{ width: 110 }} />
+        <input className="inp" placeholder="Main (AKs, 77…)" value={combo} onChange={(e) => (setCombo(e.target.value), setOffset(0))}  />
+        <input className="inp" placeholder="Pot min (bb)" value={minPot ?? ""} onChange={(e) => setMinPot(e.target.value ? +e.target.value : null)}  />
         <Btn small icon="refresh" onClick={reset}>
           Réinitialiser
         </Btn>
-        <div className="grow" />
+        </div>
+      </PaneLeft>
+      <PaneRight>
+        <HandCard h={hover} />
         {data && (
-          <div className="hand-sum">
-            <span>
-              {num(data.total)} mains · chips réels <b className={tone(data.net)}>{signed(data.net, 0)}</b> · chips all-in ajustés{" "}
+          <div className="side-card">
+            <div className="pane-title">Mains listées</div>
+            <div className="side-kv">
+              <span>Mains</span>
+              <b>{num(data.total)}</b>
+              <span>Chips réels</span>
+              <b className={tone(data.net)}>{signed(data.net, 0)}</b>
+              <span>Chips all-in ajustés</span>
               <b className={tone(data.ev)}>{signed(data.ev, 0)}</b>
               {data.complete && data.tournaments > 0 ? (
                 <>
-                  {" "}
-                  · CEV <b className={tone(data.ev)}>{signed(data.ev / data.tournaments, 1)}</b> / tournoi
+                  <span>CEV / tournoi</span>
+                  <b className={tone(data.ev)}>{signed(data.ev / data.tournaments, 1)}</b>
                 </>
               ) : data.total > 0 ? (
                 <>
-                  {" "}
-                  · <b className={tone(data.ev)}>{signed(data.ev / data.total, 2)}</b> / main
+                  <span>CEV / main</span>
+                  <b className={tone(data.ev)}>{signed(data.ev / data.total, 2)}</b>
                 </>
               ) : null}
-              <Help text="Les totaux additionnent les jetons de toutes les mains listées. Le CEV est la moyenne par tournoi (chips all-in ajustés ÷ nombre de tournois) : c'est le chiffre du tableau de bord. Avec un filtre de main (cartes, scénario, pot…), seule la moyenne par main a un sens." />
-            </span>
+            </div>
+            <div className="muted small">
+              Totaux de toutes les mains listées. Le CEV par tournoi est le chiffre du tableau de bord ; avec un filtre de main (cartes, scénario, pot…), seule la moyenne par main a un sens.
+            </div>
           </div>
         )}
-      </div>
+      </PaneRight>
       <Panel pad={false} right={<Pager total={data?.total ?? 0} offset={offset} limit={limit} onChange={setOffset} />}>
         {loading && !data ? (
           <Loading />
@@ -153,7 +165,7 @@ export function Hands() {
               </thead>
               <tbody>
                 {data.rows.map((h) => (
-                  <tr key={h.id} onClick={() => open({ type: "hand", id: h.id })}>
+                  <tr key={h.id} onClick={() => open({ type: "hand", id: h.id })} onMouseEnter={() => setHover(h)}>
                     <td>
                       <button
                         className={cls("star", h.fav && "on")}
@@ -188,6 +200,48 @@ export function Hands() {
           </div>
         )}
       </Panel>
+    </div>
+  );
+}
+
+/** Main survolée, en grand dans le panneau de droite. */
+function HandCard({ h }: { h: HandRow | null }) {
+  if (!h) return <div className="side-card side-hint">Survole une main pour la voir ici, clique pour la rejouer.</div>;
+  return (
+    <div className="side-card" key={h.id}>
+      <div className="row gap8">
+        <b>{h.scenario}</b>
+        <span className="muted small">{num(h.eff_bb, 1)} bb</span>
+        <div className="grow" />
+        <span className="muted small">{date(h.ts, true)}</span>
+      </div>
+      <div className="row gap12 wrap" style={{ alignItems: "center" }}>
+        <Cards cards={h.cards} size="md" />
+        {h.board.length > 0 && <Cards cards={h.board} size="sm" />}
+      </div>
+      <div className="side-kv">
+        <span>Ligne</span>
+        <b className="mono">{h.line || "–"}</b>
+        <span>Pot</span>
+        <b>{num(h.pot / h.bb, 1)} bb</b>
+        {h.equity != null && (
+          <>
+            <span>Équité all-in</span>
+            <b>{num(h.equity * 100, 0)} %</b>
+          </>
+        )}
+        <span>Chips</span>
+        <b className={tone(h.net)}>{signed(h.net, 0)}</b>
+        <span>CEV</span>
+        <b className={tone(h.ev)}>{signed(h.ev, 0)}</b>
+        {h.allin != null && (
+          <>
+            <span>Écart à l'espérance</span>
+            <b className={tone(h.net - h.ev)}>{signed(h.net - h.ev, 0)}</b>
+          </>
+        )}
+      </div>
+      {h.fav_note && <div className="muted small">★ {h.fav_note}</div>}
     </div>
   );
 }

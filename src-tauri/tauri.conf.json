@@ -16,13 +16,14 @@
         "title": "Spin Tracker OP",
         "width": 1480,
         "height": 920,
-        "minWidth": 1100,
-        "minHeight": 700,
+        "minWidth": 900,
+        "minHeight": 560,
         "dragDropEnabled": true,
-        "backgroundColor": "#0d0b0a",
         "decorations": false,
-        "maximized": true,
-        "shadow": false
+        "maximized": false,
+        "shadow": false,
+        "transparent": true,
+        "visible": false
       }
     ],
     "security": {
