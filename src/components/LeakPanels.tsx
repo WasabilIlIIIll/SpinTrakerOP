@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { LeakReport, NodeOut, Post } from "../lib/api";
 import { cls, num } from "../lib/format";
 import { Icon } from "./Icon";
-import { Modal } from "./ui";
+import { Help } from "./ui";
 
 export const ACTIONS: Record<string, (string | null)[]> = {
   open: ["All-in", "Open", "Limp", "Fold"],
@@ -12,6 +12,22 @@ export const ACTIONS: Record<string, (string | null)[]> = {
 };
 
 const ACT_COLORS = ["var(--pos)", "#3b82f6", "var(--gold)", "var(--faint)"];
+
+/** Type de coup d'une situation : premier à parler, face à un limp, une relance, un 3-bet ou plus, un tapis. */
+export function kindOf(n: NodeOut): "open" | "limp" | "raise" | "3bet" | "shove" {
+  if (n.kind === "open") return "open";
+  if (n.kind === "vs_limp") return "limp";
+  if (n.kind === "vs_shove") return "shove";
+  return /3-bet|4-bet|3B|4B/.test(n.label) ? "3bet" : "raise";
+}
+
+export const KINDS: [string, string][] = [
+  ["open", "Premier à parler"],
+  ["limp", "Face à un limp"],
+  ["raise", "Face à une relance"],
+  ["3bet", "Face à un 3-bet ou plus"],
+  ["shove", "Face à un tapis"],
+];
 
 function pctOf(c: number[], k: number) {
   const t = c.reduce((a, b) => a + b, 0);
@@ -38,19 +54,14 @@ function Cell({ mine, ref, n, main }: { mine: number; ref?: number | null; n: nu
   );
 }
 
-export function NodeCard({ node, onMatrix }: { node: NodeOut; onMatrix?: (n: NodeOut) => void }) {
+export function NodeCard({ node, onMatrix, selected }: { node: NodeOut; onMatrix?: (n: NodeOut) => void; selected?: boolean }) {
   const acts = ACTIONS[node.kind];
   const cols = acts.map((a, k) => ({ a, k })).filter((x) => x.a);
   return (
-    <div className="lk-node">
+    <div className={cls("lk-node", onMatrix && "clk", selected && "sel")} onClick={onMatrix ? () => onMatrix(node) : undefined} title={onMatrix ? "Cliquer pour voir la grille de mes mains" : undefined}>
       <div className="lk-nh">
         <span>{node.label}</span>
         {node.ref_total > 0 && <span className="lk-ref" title="Taille de l'échantillon de référence">réf. {node.ref_total >= 1000 ? `${num(node.ref_total / 1000, 1)}k` : node.ref_total}</span>}
-        {onMatrix && Object.keys(node.matrix).length > 0 && (
-          <button className="icon-btn" title="Voir la grille de mains" onClick={() => onMatrix(node)}>
-            <Icon name="layers" size={14} />
-          </button>
-        )}
       </div>
       <div className="lk-big">
         <div>
@@ -143,14 +154,27 @@ export function HandMatrix({ node }: { node: NodeOut }) {
   );
 }
 
-export function LeakPanels({ report, scenarios, minHands = 3 }: { report: LeakReport; scenarios?: string[]; minHands?: number }) {
-  const [mx, setMx] = useState<NodeOut | null>(null);
+export function LeakPanels({
+  report,
+  scenarios,
+  kinds,
+  minHands = 3,
+  selected,
+  onSelect,
+}: {
+  report: LeakReport;
+  scenarios?: string[];
+  kinds?: string[];
+  minHands?: number;
+  selected?: string | null;
+  onSelect?: (n: NodeOut) => void;
+}) {
   const panels = report.panels.filter((p) => (!scenarios || scenarios.includes(p.scenario)) && p.nodes.length > 0);
   if (panels.length === 0) return <div className="muted">Aucune décision préflop sur cette sélection.</div>;
   return (
     <div className="lk-panels">
       {panels.map((p) => {
-        const nodes = p.nodes.filter((n) => n.total >= minHands);
+        const nodes = p.nodes.filter((n) => n.total >= minHands && (!kinds?.length || kinds.includes(kindOf(n))));
         if (!nodes.length) return null;
         return (
           <div key={p.scenario} className="lk-sc">
@@ -160,17 +184,12 @@ export function LeakPanels({ report, scenarios, minHands = 3 }: { report: LeakRe
             </div>
             <div className="lk-nodes">
               {nodes.map((n) => (
-                <NodeCard key={n.key} node={n} onMatrix={setMx} />
+                <NodeCard key={n.key} node={n} onMatrix={onSelect} selected={selected === n.key} />
               ))}
             </div>
           </div>
         );
       })}
-      {mx && (
-        <Modal title={mx.label} onClose={() => setMx(null)}>
-          <HandMatrix node={mx} />
-        </Modal>
-      )}
     </div>
   );
 }
@@ -241,23 +260,14 @@ export function PostflopTable({ mine, reference }: { mine: Post[]; reference: Po
 }
 
 /** Explique d'où viennent les références et comment l'écart est jugé. */
-export function RefSources({ mode, tagName }: { mode: string; tagName?: string }) {
-  const src =
-    mode === "population"
-      ? "tous les autres joueurs présents dans vos historiques, dans la même situation et la même tranche de tapis"
-      : mode.startsWith("tag:")
-        ? `les joueurs portant le tag « ${tagName ?? mode.slice(4)} », dans la même situation et la même tranche de tapis`
-        : mode === "custom"
-          ? "vos propres cibles, saisies dans Paramètres → Références (par exemple issues d'un solveur)"
-          : "aucune (affichage des fréquences brutes)";
+export function RefSources({ label }: { label: string }) {
   return (
     <div className="ref-src">
       <Icon name="info" size={14} />
-      <div>
-        <b>Référence : {src}.</b> Spin Tracker OP ne contient aucune solution GTO : les comparaisons sont statistiques, calculées sur vos propres données.
-        Un écart est signalé quand il dépasse la tolérance <code>4 % + 40/√n</code> (n = taille de votre échantillon), et en rouge au-delà de 2,2 fois cette
-        tolérance ; en dessous de 8 décisions, la case reste grise.
-      </div>
+      <span>
+        Référence : <b>{label}</b>, dans la même situation et la même tranche de tapis.
+      </span>
+      <Help text="Spin Tracker OP ne contient aucune solution GTO : la comparaison se fait avec des mains réelles (les tiennes pour les groupes de ta base, ou une base importée). Un écart est signalé au-delà de 4 % + 40/√n (n = ton nombre de mains), en rouge au-delà de 2,2 fois cette tolérance ; sous 8 décisions, la case reste grise. Plus la référence contient de mains, plus l'écart est fiable : importe une grosse base pour des comparaisons solides." />
     </div>
   );
 }

@@ -4,6 +4,7 @@ pub mod charts;
 pub mod leaks;
 pub mod players;
 pub mod ptree;
+pub mod refdata;
 pub mod summary;
 
 use crate::store::Store;

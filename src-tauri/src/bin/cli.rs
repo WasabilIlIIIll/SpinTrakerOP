@@ -24,6 +24,10 @@ fn data_dir() -> PathBuf {
     base.join("com.spintrackerop.desktop")
 }
 
+fn a1(args: &[String], i: usize, d: &str) -> String {
+    args.get(i).cloned().unwrap_or_else(|| d.to_string())
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let dir = data_dir();
@@ -146,7 +150,7 @@ fn main() {
             }
             let s = state.store.read();
             let a = |i: usize, d: &str| args.get(i).cloned().unwrap_or_else(|| d.to_string());
-            let r = stats::leaks::leak_report_vs(&s, &a(1, ""), &Default::default(), &a(2, "population"), true, &a(3, ""));
+            let r = stats::leaks::leak_report_vs(&s, &a(1, ""), &Default::default(), &a(2, "population"), true, &a(3, ""), None);
             println!("{}", serde_json::to_string(&r).unwrap());
         }
         Some("ptreejson") => {
@@ -157,8 +161,17 @@ fn main() {
             }
             let s = state.store.read();
             let a = |i: usize, d: &str| args.get(i).cloned().unwrap_or_else(|| d.to_string());
-            let t = stats::ptree::postflop_tree(&s, &a(1, ""), &Default::default(), &a(2, ""), &a(3, "3max"), &a(4, "BTN"), &a(5, "BB"), &a(6, ""), &[]);
+            let t = stats::ptree::postflop_tree(&s, &a(1, ""), &Default::default(), &a(2, ""), &a(3, "3max"), &a(4, "BTN"), &a(5, "BB"), &a(6, ""), &[], &stats::ptree::RefSel::Population);
             println!("{}", serde_json::to_string(&t).unwrap());
+        }
+        Some("refjson") => {
+            {
+                let mut db = state.db.lock();
+                let mut st = state.store.write();
+                import::load(&mut db, &mut st).ok();
+            }
+            let f = stats::refdata::build(&state.store.read(), &a1(&args, 1, "population"), &Default::default(), "Test", "");
+            println!("{}", serde_json::to_string(&f).unwrap());
         }
         Some("ptree") => {
             {
@@ -168,7 +181,7 @@ fn main() {
             }
             let s = state.store.read();
             let a = |i: usize, d: &str| args.get(i).cloned().unwrap_or_else(|| d.to_string());
-            let t = stats::ptree::postflop_tree(&s, &a(1, ""), &Default::default(), &a(2, "all"), &a(3, "3max"), &a(4, "BTN"), &a(5, "BB"), &a(6, ""), &[]);
+            let t = stats::ptree::postflop_tree(&s, &a(1, ""), &Default::default(), &a(2, "all"), &a(3, "3max"), &a(4, "BTN"), &a(5, "BB"), &a(6, ""), &[], &stats::ptree::RefSel::Population);
             fn show(n: &stats::ptree::PNode, depth: usize, label: &str) {
                 if depth > 4 || n.n + n.r < 20 {
                     return;

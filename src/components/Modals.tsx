@@ -260,7 +260,7 @@ function PlayerModal({ name, onClose }: { name: string; onClose: () => void }) {
               </div>
             </div>
           )}
-          {tab === "pre" && (lr ? (<><RefSources mode={ref} tagName={settings?.tags.find((t) => `tag:${t.id}` === ref)?.name} /><RefLegend /><LeakPanels report={lr} /></>) : <Loading />)}
+          {tab === "pre" && (lr ? (<><RefSources label={ref === "population" ? "population" : ref.startsWith("tag:") ? `${settings?.tags.find((t) => `tag:${t.id}` === ref)?.name ?? ref.slice(4)}s` : ref === "custom" ? "références personnalisées" : "aucune"} /><RefLegend /><LeakPanels report={lr} /></>) : <Loading />)}
           {tab === "post" && (lr ? <PostflopTable mine={lr.postflop.player} reference={lr.postflop.reference} /> : <Loading />)}
           {tab === "tourn" && (
             <div className="tbl-wrap" style={{ maxHeight: 460 }}>

@@ -39,8 +39,9 @@ html, body, #root { background: transparent !important; background-image: none !
     rgba(20, 19, 18, var(--glass)) 55%,
     rgba(30, 28, 26, calc(var(--glass) + 0.02)));
   border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26), inset 0 -1px 0 rgba(255, 255, 255, 0.05), 0 30px 70px rgba(0, 0, 0, 0.4);
-  transition: transform 0.7s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.4s ease;
+  /* aucune ombre portée : le bureau autour des panneaux reste intact, pas de halo sombre */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26), inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+  transition: transform 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .pane-left { grid-column: 1; grid-row: 1 / 3; align-self: center; height: 96%; }
 .pane-right { grid-column: 3; grid-row: 1 / 3; align-self: center; height: 96%; }
@@ -86,7 +87,7 @@ html[data-unfold="on"] .topbar { animation: top-in 0.7s 0.2s cubic-bezier(0.2, 0
   display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 10px;
   min-height: 48px; padding: 5px 6px 5px 20px; border-radius: 999px; cursor: default; user-select: none;
   background: linear-gradient(160deg, rgba(64, 60, 56, calc(var(--glass) + 0.06)), rgba(22, 20, 18, calc(var(--glass) + 0.04)));
-  border: 1px solid rgba(255, 255, 255, 0.2); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24), 0 14px 34px rgba(0, 0, 0, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.2); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
 }
 .top-title { font-family: var(--font-d); font-weight: 600; letter-spacing: -0.01em; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .top-slot { display: flex; justify-content: center; }
@@ -415,3 +416,51 @@ html[data-focus="on"] .pane-left, html[data-focus="on"] .pane-right { visibility
 .rvp-h { display: flex; align-items: center; gap: 6px; }
 .rvp-col .hgrid { max-width: 100%; }
 .cmp-gap.few { opacity: 0.45; }
+
+/* ---------- leak finder v2 ---------- */
+/* grilles de mains : tiennent dans leur panneau, quelle que soit la largeur */
+.hm { grid-template-columns: repeat(13, minmax(0, 1fr)); gap: 1px; }
+.hm-c { min-width: 0; overflow: hidden; border-radius: 3px; }
+.pane-right .hm-c span { font-size: 0.5rem; }
+.pane-right .hm-c small { display: none; }
+.pane-right .hm-legend { gap: 5px; margin-bottom: 8px; }
+.pane-right .hm-lg { padding: 3px 8px; font-size: 0.72rem; }
+.ref-src { align-items: center; padding: 8px 12px; margin-bottom: 8px; background: rgba(0, 0, 0, 0.18); }
+.lk-node.clk { cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.lk-node.clk:hover { border-color: rgba(255, 255, 255, 0.25); }
+.lk-node.sel { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.lf-manage { display: flex; align-items: center; gap: 7px; font-size: 0.78rem; color: var(--muted); padding: 6px 4px; }
+.lf-manage:hover { color: var(--text); }
+.fchip.lf-file { border-style: dashed; }
+.rvp-list.side { max-height: none; }
+.ptd-name { font-family: var(--font-d); font-size: 1.3rem; font-weight: 600; }
+
+/* arbre de décision postflop */
+.ptv-wrap { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.center-scroll > .page:has(.ptv-wrap) { height: 100%; }
+.page > .ptv-wrap { flex: 1 1 auto; }
+.ptv-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.86rem; }
+.ptv { flex: 1 1 auto; min-height: 320px; overflow: auto; border-radius: 22px; background: rgba(8, 8, 8, 0.62); border: 1px solid rgba(255, 255, 255, 0.08); cursor: grab; }
+.ptv:active { cursor: grabbing; }
+.ptv-canvas { position: relative; transform-origin: 0 0; margin: 20px; }
+.ptv-lines { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+.ptn-root { position: absolute; left: 0; height: 88px; display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 10px 12px; border-radius: 16px; background: rgba(255, 255, 255, 0.92); color: #15120f; }
+.ptn-root .muted { color: #57524c; }
+.ptn-root .pt-street { background: #15120f; color: #fff; align-self: flex-start; }
+.ptn { position: absolute; display: flex; flex-direction: column; justify-content: space-between; gap: 3px; padding: 8px 10px 7px 13px; border-radius: 14px; text-align: left; cursor: pointer;
+  background: rgba(30, 28, 26, 0.96); border: 1px solid rgba(255, 255, 255, 0.1); transition: border-color 0.15s, transform 0.15s; animation: rise 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+.ptn::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 4px; border-radius: 0 4px 4px 0; background: var(--c); }
+.ptn:hover { border-color: rgba(255, 255, 255, 0.28); }
+.ptn.sel { border-color: #fff; box-shadow: 0 0 0 1px #fff; }
+.ptn.me { background: rgba(38, 42, 30, 0.97); }
+.ptn.end { cursor: default; opacity: 0.92; }
+.ptn-h { display: flex; justify-content: space-between; align-items: center; font-size: 0.68rem; color: var(--faint); text-transform: uppercase; letter-spacing: 0.06em; }
+.ptn-m { display: flex; align-items: baseline; gap: 8px; }
+.ptn-name { font-size: 1rem; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ptn-pct { margin-left: auto; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.ptn-ref { font-size: 0.7rem; color: var(--faint); white-space: nowrap; min-width: 52px; text-align: right; }
+.ptn-sizes { display: flex; height: 5px; border-radius: 99px; overflow: hidden; background: rgba(255, 255, 255, 0.06); }
+.ptn-sizes.none { background: transparent; }
+.ptn-sizes i { display: block; height: 100%; }
+.ptn-f { display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ptn-next { padding: 1px 7px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); color: var(--text); }

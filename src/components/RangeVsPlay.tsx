@@ -118,31 +118,6 @@ export function RangeVsPlay({ book }: { book: RangeBook | null }) {
   return (
     <div className="rvp">
       <PaneLeft>
-        <div className="pane-title">Spots joués</div>
-        <div className="seg seg-sm">
-          {(Object.keys(FORMATS) as Fmt[]).map((f) => (
-            <button key={f} className={cls(fmt === f && "on")} onClick={() => (setFmt(f), setSel(null))}>
-              {FORMATS[f].short}
-            </button>
-          ))}
-        </div>
-        <div className="rvp-list">
-          {list.map((s) => (
-            <button key={s.id} className={cls("rvp-spot", cur?.id === s.id && "on")} onClick={() => setSel(s.id)}>
-              <span>
-                {fmtBB(s.depth)} bb · {labels.get(s.id) ?? `${s.hero} ${s.key}`}
-              </span>
-              <small className={s.ok / s.n >= 0.85 ? "pos" : "neg"}>
-                {num((s.ok / s.n) * 100, 0)} % · {num(s.n)}
-              </small>
-            </button>
-          ))}
-        </div>
-        <Btn small icon="refresh" onClick={run} disabled={busy}>
-          {busy ? "Analyse…" : "Relancer l'analyse"}
-        </Btn>
-      </PaneLeft>
-      <PaneRight>
         {cur && view && (
           <div className="side-card">
             <div className="pane-title">Ce spot</div>
@@ -202,6 +177,31 @@ export function RangeVsPlay({ book }: { book: RangeBook | null }) {
             </span>
           </div>
         )}
+      </PaneLeft>
+      <PaneRight>
+        <div className="pane-title">Spots joués</div>
+        <div className="seg seg-sm">
+          {(Object.keys(FORMATS) as Fmt[]).map((f) => (
+            <button key={f} className={cls(fmt === f && "on")} onClick={() => (setFmt(f), setSel(null))}>
+              {FORMATS[f].short}
+            </button>
+          ))}
+        </div>
+        <div className="rvp-list side">
+          {list.map((s) => (
+            <button key={s.id} className={cls("rvp-spot", cur?.id === s.id && "on")} onClick={() => setSel(s.id)}>
+              <span>
+                {fmtBB(s.depth)} bb · {labels.get(s.id) ?? `${s.hero} ${s.key}`}
+              </span>
+              <small className={s.ok / s.n >= 0.85 ? "pos" : "neg"}>
+                {num((s.ok / s.n) * 100, 0)} % · {num(s.n)}
+              </small>
+            </button>
+          ))}
+        </div>
+        <Btn small icon="refresh" onClick={run} disabled={busy}>
+          {busy ? "Analyse…" : "Relancer l'analyse"}
+        </Btn>
       </PaneRight>
       {!cur || !view ? (
         <Empty title="Aucun spot" sub="Aucune de tes mains ne tombe dans les spots de tes ranges pour ce format." icon="target" />

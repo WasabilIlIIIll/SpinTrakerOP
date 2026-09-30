@@ -379,12 +379,24 @@ export interface PNode {
   n: number;
   r: number;
   net: number;
-  kids: { label: string; node: PNode }[];
+  kids: { label: string; sizes: [string, number, number][]; node: PNode }[];
+}
+
+/** Base de référence importée (stats agrégées d'un groupe de joueurs). */
+export interface RefInfo {
+  id: string;
+  name: string;
+  description: string;
+  created: number;
+  hands: number;
+  situations: number;
+  trees: number;
 }
 
 export interface PTree {
   pots: { key: string; label: string; n: number }[];
   pot: string;
+  aggressor: string;
   hands: number;
   ref_hands: number;
   root: PNode;
@@ -538,8 +550,12 @@ export const api = {
   savePlayerMeta: (name: string, tags: string[], notes: string) => call<void>("save_player_meta", { name, tags, notes }),
   tagsOverview: () => call<TagsOverviewRow[]>("tags_overview"),
   leakReport: (player: string, filter: Filter, reference: string, vs?: string) => call<LeakReport>("leak_report", { player, filter, reference, vs: vs ?? null }),
-  postflopTree: (q: { player: string; filter: Filter; vs: string; table: string; mePos: string; oppPos: string; pot: string; buckets: string[] }) =>
-    call<PTree>("postflop_tree", { player: q.player, filter: q.filter, vs: q.vs, table: q.table, mePos: q.mePos, oppPos: q.oppPos, pot: q.pot, buckets: q.buckets }),
+  postflopTree: (q: { player: string; filter: Filter; vs: string; table: string; mePos: string; oppPos: string; pot: string; buckets: string[]; reference: string }) =>
+    call<PTree>("postflop_tree", { player: q.player, filter: q.filter, vs: q.vs, table: q.table, mePos: q.mePos, oppPos: q.oppPos, pot: q.pot, buckets: q.buckets, reference: q.reference }),
+  refList: () => call<RefInfo[]>("ref_list"),
+  refImport: (path: string) => call<string>("ref_import", { path }),
+  refDelete: (id: string) => call<void>("ref_delete", { id }),
+  refExport: (who: string, filter: Filter, name: string, description: string, path: string) => call<number>("ref_export", { who, filter, name, description, path }),
   getSettings: () => call<Settings>("get_settings"),
   saveSettings: (settings: Settings) => call<void>("save_settings", { settings }),
   defaultSettings: () => call<Settings>("default_settings"),

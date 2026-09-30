@@ -643,9 +643,16 @@ pub fn tags_overview(state: State<AppState>) -> Value {
     json!(rows)
 }
 
+fn data_dir(state: &AppState) -> std::path::PathBuf {
+    state.db_path.parent().map(std::path::Path::to_path_buf).unwrap_or_default()
+}
+
+/// `reference` : "population" | "tag:<id>" | "player:<pseudo>" | "players:…" | "custom" |
+/// "file:<id>" (base de référence importée) | "none"
 #[tauri::command]
 pub fn leak_report(state: State<AppState>, player: String, filter: Filter, reference: String, vs: Option<String>) -> LeakReport {
-    leaks::leak_report_vs(&state.store.read(), &player, &filter, &reference, true, vs.as_deref().unwrap_or(""))
+    let file = reference.strip_prefix("file:").and_then(|id| crate::stats::refdata::load(&data_dir(&state), id));
+    leaks::leak_report_vs(&state.store.read(), &player, &filter, &reference, true, vs.as_deref().unwrap_or(""), file.as_ref())
 }
 
 /// Arbre de décision postflop d'un duel (voir stats/ptree.rs).
@@ -661,8 +668,49 @@ pub fn postflop_tree(
     opp_pos: String,
     pot: String,
     buckets: Vec<String>,
+    reference: Option<String>,
 ) -> crate::stats::ptree::PTree {
-    crate::stats::ptree::postflop_tree(&state.store.read(), &player, &filter, &vs, &table, &me_pos, &opp_pos, &pot, &buckets)
+    use crate::stats::ptree::RefSel;
+    let st = state.store.read();
+    let reference = reference.unwrap_or_else(|| "population".into());
+    let rs = if reference == "none" {
+        RefSel::None
+    } else if let Some(id) = reference.strip_prefix("file:") {
+        RefSel::File(crate::stats::refdata::load(&data_dir(&state), id).map(|f| f.trees).unwrap_or_default())
+    } else if reference.starts_with("tag:") || reference.starts_with("player:") || reference.starts_with("players:") {
+        match leaks::Subject::parse(&st, &reference) {
+            leaks::Subject::Set(set) => RefSel::Set(set),
+            _ => RefSel::Population,
+        }
+    } else {
+        RefSel::Population
+    };
+    crate::stats::ptree::postflop_tree(&st, &player, &filter, &vs, &table, &me_pos, &opp_pos, &pot, &buckets, &rs)
+}
+
+/// Bases de référence importées.
+#[tauri::command]
+pub fn ref_list(state: State<AppState>) -> Vec<crate::stats::refdata::RefInfo> {
+    crate::stats::refdata::list(&data_dir(&state))
+}
+
+#[tauri::command]
+pub fn ref_import(state: State<AppState>, path: String) -> Result<String, String> {
+    crate::stats::refdata::import(&data_dir(&state), std::path::Path::new(&path))
+}
+
+#[tauri::command]
+pub fn ref_delete(state: State<AppState>, id: String) -> Result<(), String> {
+    crate::stats::refdata::delete(&data_dir(&state), &id)
+}
+
+/// Exporte les statistiques agrégées d'un groupe (`who`) sur la sélection vers `path`.
+#[tauri::command]
+pub fn ref_export(state: State<AppState>, who: String, filter: Filter, name: String, description: String, path: String) -> Result<u32, String> {
+    let f = crate::stats::refdata::build(&state.store.read(), &who, &filter, &name, &description);
+    let json = serde_json::to_string(&f).map_err(|e| e.to_string())?;
+    std::fs::write(&path, json).map_err(|e| e.to_string())?;
+    Ok(f.hands)
 }
 
 #[tauri::command]

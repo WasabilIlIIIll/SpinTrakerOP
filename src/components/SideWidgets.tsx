@@ -138,6 +138,7 @@ const DEFAULTS: Record<string, Partial<Record<Side, string[]>>> = {
   hands: { right: [] },
   players: { right: [] },
   ranges: { right: ["trainer", "review"] },
+  leaks: { right: [] },
   challenges: { right: [] },
   import: { right: ["review"] },
   settings: { right: ["summary"] },

@@ -1,14 +1,15 @@
 //! Leak finder postflop : arbre de décision d'un duel (ex. BTN contre BB en pot relancé).
-//! Chaque nœud est un moment où un joueur doit agir ; ses branches sont les actions jouées
-//! (mises regroupées par taille, en % du pot). Les fréquences du sujet analysé (héros, joueur,
-//! groupe) sont comparées à celles des autres joueurs au même poste (référence).
+//! Chaque nœud est un moment où un joueur doit agir ; ses branches sont les actions jouées :
+//! check, mise (toutes tailles regroupées, avec leur répartition en % du pot), call, relance,
+//! fold. Les fréquences du sujet (moi par défaut) sont comparées à une référence : les autres
+//! joueurs au même poste, un groupe (tag, joueurs) ou une base de référence importée.
 
 use super::leaks::{Subject, BUCKETS};
 use super::Filter;
 use crate::analysis::Pos;
 use crate::model::{ActKind, STREET_FLOP, STREET_PREFLOP};
 use crate::store::{HandRec, Store};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 
 #[derive(Serialize, Default)]
@@ -29,7 +30,10 @@ pub struct PNode {
 
 #[derive(Serialize)]
 pub struct PEdge {
+    /// "Check" | "Bet" | "Call" | "Raise" | "Fold"
     pub label: String,
+    /// répartition par taille : [taille, mains du sujet, mains de la référence]
+    pub sizes: Vec<(String, u32, u32)>,
     pub node: PNode,
 }
 
@@ -44,9 +48,21 @@ pub struct PotOpt {
 pub struct PTree {
     pub pots: Vec<PotOpt>,
     pub pot: String,
+    /// poste du dernier relanceur préflop (vide en pot limpé)
+    pub aggressor: String,
     pub hands: u32,
     pub ref_hands: u32,
     pub root: PNode,
+}
+
+/// Arbre compact d'une base de référence importée (comptes seulement).
+#[derive(Serialize, Deserialize, Clone, Default)]
+pub struct TNode {
+    pub n: u32,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub sizes: BTreeMap<String, u32>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub kids: BTreeMap<String, TNode>,
 }
 
 #[derive(Default)]
@@ -56,27 +72,39 @@ struct Build {
     n: u32,
     r: u32,
     net: f64,
+    sizes: BTreeMap<String, (u32, u32)>,
     kids: BTreeMap<String, Build>,
 }
 
-fn pos_label(p: Pos, n: usize) -> &'static str {
-    match (p, n) {
-        (Pos::Btn, _) => "BTN",
-        (Pos::Sb, _) => "SB",
-        (Pos::Bb, _) => "BB",
+/// Référence de l'arbre.
+pub enum RefSel {
+    None,
+    /// les autres joueurs au même poste
+    Population,
+    /// un ensemble de joueurs (tag, pseudo, groupe)
+    Set(HashSet<String>),
+    /// arbres d'une base importée (par duel et type de pot)
+    File(BTreeMap<String, TNode>),
+}
+
+fn pos_label(p: Pos) -> &'static str {
+    match p {
+        Pos::Btn => "BTN",
+        Pos::Sb => "SB",
+        Pos::Bb => "BB",
     }
 }
 
-/// Libellé d'une mise selon sa taille (en % du pot avant la mise).
-fn bet_label(pct: f64) -> &'static str {
+/// Taille d'une mise en % du pot avant la mise.
+fn bet_size(pct: f64) -> &'static str {
     if pct < 45.0 {
-        "Bet ⅓"
+        "⅓"
     } else if pct < 62.0 {
-        "Bet ½"
+        "½"
     } else if pct < 90.0 {
-        "Bet ¾"
+        "¾"
     } else if pct < 125.0 {
-        "Bet pot"
+        "Pot"
     } else {
         "Overbet"
     }
@@ -124,7 +152,7 @@ fn duel(r: &HandRec, table: &str, me_pos: &str, opp_pos: &str) -> Option<(usize,
     if seen.len() != 2 {
         return None;
     }
-    let lab = |i: usize| pos_label(r.f.players[i].pos, n);
+    let lab = |i: usize| pos_label(r.f.players[i].pos);
     let me = *seen.iter().find(|&&i| lab(i) == me_pos)?;
     let opp = *seen.iter().find(|&&i| i != me && lab(i) == opp_pos)?;
     Some((me, opp))
@@ -138,7 +166,6 @@ fn eff_bucket(r: &HandRec, a: usize, b: usize) -> usize {
 
 /// Parcourt les actions postflop d'une main et les ajoute à l'arbre.
 fn walk(root: &mut Build, r: &HandRec, me: usize, subject: bool) {
-    let n = r.h.seats.len();
     let mut pot: f64 = r.h.actions.iter().filter(|a| a.street == STREET_PREFLOP).map(|a| a.amount).sum();
     let net = if subject { r.f.players[me].net / r.h.bb.max(1e-9) } else { 0.0 };
     let mut node = root;
@@ -152,61 +179,94 @@ fn walk(root: &mut Build, r: &HandRec, me: usize, subject: bool) {
     };
     add(node);
     for a in r.h.actions.iter().filter(|a| a.street >= STREET_FLOP) {
-        let label: String = match a.kind {
-            ActKind::Check => "Check".into(),
-            ActKind::Fold => "Fold".into(),
-            ActKind::Call => {
-                if a.allin {
-                    "Call all-in".into()
-                } else {
-                    "Call".into()
-                }
-            }
-            ActKind::Bet => {
-                if a.allin {
-                    "All-in".into()
-                } else {
-                    bet_label(a.amount / pot.max(1e-9) * 100.0).into()
-                }
-            }
-            ActKind::Raise => {
-                if a.allin {
-                    "Raise all-in".into()
-                } else {
-                    "Raise".into()
-                }
-            }
+        let (label, size): (&str, &str) = match a.kind {
+            ActKind::Check => ("Check", ""),
+            ActKind::Fold => ("Fold", ""),
+            ActKind::Call => ("Call", if a.allin { "Tapis" } else { "" }),
+            ActKind::Bet => ("Bet", if a.allin { "Tapis" } else { bet_size(a.amount / pot.max(1e-9) * 100.0) }),
+            ActKind::Raise => ("Raise", if a.allin { "Tapis" } else { "Relance" }),
             _ => continue,
         };
         pot += a.amount;
         if node.actor.is_empty() {
-            node.actor = pos_label(r.f.players[a.p as usize].pos, n).into();
+            node.actor = pos_label(r.f.players[a.p as usize].pos).into();
             node.street = a.street;
         }
-        node = node.kids.entry(label).or_default();
+        node = node.kids.entry(label.to_string()).or_default();
+        if !size.is_empty() {
+            let e = node.sizes.entry(size.to_string()).or_default();
+            if subject {
+                e.0 += 1;
+            } else {
+                e.1 += 1;
+            }
+        }
         add(node);
     }
 }
 
+/// Ajoute les comptes d'une base importée comme référence.
+fn merge_file(b: &mut Build, t: &TNode) {
+    b.r += t.n;
+    for (k, v) in &t.sizes {
+        b.sizes.entry(k.clone()).or_default().1 += v;
+    }
+    for (l, k) in &t.kids {
+        merge_file(b.kids.entry(l.clone()).or_default(), k);
+    }
+}
+
+const ORDER: [&str; 5] = ["Check", "Bet", "Call", "Raise", "Fold"];
+const SIZES: [&str; 8] = ["⅓", "½", "¾", "Pot", "Overbet", "Relance", "Tapis", ""];
+
 fn finish(b: Build, me_pos: &str) -> PNode {
-    let mut kids: Vec<PEdge> = b.kids.into_iter().map(|(label, k)| PEdge { label, node: finish(k, me_pos) }).collect();
-    // ordre de lecture : check, mises de la plus petite à la plus grosse, call, raise, fold
-    let rank = |l: &str| -> usize {
-        ["Check", "Bet ⅓", "Bet ½", "Bet ¾", "Bet pot", "Overbet", "All-in", "Call", "Call all-in", "Raise", "Raise all-in", "Fold"].iter().position(|x| *x == l).unwrap_or(99)
-    };
-    kids.sort_by_key(|e| rank(&e.label));
+    let mut kids: Vec<PEdge> = b
+        .kids
+        .into_iter()
+        .map(|(label, mut k)| {
+            let mut sizes: Vec<(String, u32, u32)> = std::mem::take(&mut k.sizes).into_iter().map(|(s, (n, r))| (s, n, r)).collect();
+            sizes.sort_by_key(|x| SIZES.iter().position(|s| *s == x.0).unwrap_or(99));
+            PEdge { label, sizes, node: finish(k, me_pos) }
+        })
+        .collect();
+    kids.sort_by_key(|e| ORDER.iter().position(|x| *x == e.label).unwrap_or(99));
     PNode { street: b.street, subject: b.actor == me_pos, actor: b.actor, n: b.n, r: b.r, net: if b.n > 0 { b.net / b.n as f64 } else { 0.0 }, kids }
+}
+
+/// Arbre compact (comptes du sujet) pour l'export d'une base de référence.
+pub fn to_tnode(p: &PNode, sizes: &[(String, u32, u32)]) -> TNode {
+    TNode {
+        n: p.n,
+        sizes: sizes.iter().filter(|s| s.1 > 0).map(|s| (s.0.clone(), s.1)).collect(),
+        kids: p.kids.iter().filter(|e| e.node.n >= 2).map(|e| (e.label.clone(), to_tnode(&e.node, &e.sizes))).collect(),
+    }
+}
+
+/// Tous les duels possibles : (table, poste analysé, poste adverse).
+pub const DUELS: [(&str, &str, &str); 8] = [
+    ("3max", "BTN", "SB"),
+    ("3max", "BTN", "BB"),
+    ("3max", "SB", "BTN"),
+    ("3max", "SB", "BB"),
+    ("3max", "BB", "BTN"),
+    ("3max", "BB", "SB"),
+    ("hu", "SB", "BB"),
+    ("hu", "BB", "SB"),
+];
+
+pub fn duel_key(table: &str, me: &str, opp: &str, pot: &str) -> String {
+    format!("{table}|{me}|{opp}|{pot}")
 }
 
 /// `table` : "3max" | "hu" ; `me_pos` / `opp_pos` : "BTN" | "SB" | "BB" ;
 /// `pot` : clé de `pot_key` (vide = le plus fréquent) ; `buckets` : tranches de tapis effectif.
 #[allow(clippy::too_many_arguments)]
-pub fn postflop_tree(s: &Store, player: &str, filter: &Filter, vs: &str, table: &str, me_pos: &str, opp_pos: &str, pot: &str, buckets: &[String]) -> PTree {
+pub fn postflop_tree(s: &Store, player: &str, filter: &Filter, vs: &str, table: &str, me_pos: &str, opp_pos: &str, pot: &str, buckets: &[String], reference: &RefSel) -> PTree {
     let subject = Subject::parse(s, player);
     let sel: HashSet<usize> = filter.select(s).into_iter().collect();
     let bset: Vec<usize> = buckets.iter().filter_map(|b| BUCKETS.iter().position(|x| x.2 == b)).collect();
     // premier passage : duels retenus et types de pot
-    let mut rows: Vec<(usize, usize, usize, bool, String)> = Vec::new();
+    let mut rows: Vec<(usize, usize, bool, String)> = Vec::new();
     let mut pots: BTreeMap<String, u32> = BTreeMap::new();
     for (hi, r) in s.hands.iter().enumerate() {
         if !sel.contains(&r.t) {
@@ -224,8 +284,19 @@ pub fn postflop_tree(s: &Store, player: &str, filter: &Filter, vs: &str, table: 
         let Some(pk) = pot_key(r, me) else { continue };
         if is_subject {
             *pots.entry(pk.clone()).or_default() += 1;
+        } else {
+            // la référence exclut le héros ; groupe : seulement ses membres au poste analysé
+            let name = &r.h.seats[me].name;
+            let keep = match reference {
+                RefSel::Population => !s.is_hero(name),
+                RefSel::Set(set) => set.contains(name) && !s.is_hero(name),
+                _ => false,
+            };
+            if !keep {
+                continue;
+            }
         }
-        rows.push((hi, me, opp, is_subject, pk));
+        rows.push((hi, me, is_subject, pk));
     }
     let pot = if !pot.is_empty() && pots.contains_key(pot) {
         pot.to_string()
@@ -234,13 +305,8 @@ pub fn postflop_tree(s: &Store, player: &str, filter: &Filter, vs: &str, table: 
     };
     let mut root = Build::default();
     let (mut hands, mut ref_hands) = (0, 0);
-    for (hi, me, _opp, is_subject, pk) in &rows {
+    for (hi, me, is_subject, pk) in &rows {
         if *pk != pot {
-            continue;
-        }
-        let r = &s.hands[*hi];
-        // la référence exclut le héros (on compare le sujet aux autres joueurs)
-        if !is_subject && s.is_hero(&r.h.seats[*me].name) {
             continue;
         }
         if *is_subject {
@@ -248,11 +314,22 @@ pub fn postflop_tree(s: &Store, player: &str, filter: &Filter, vs: &str, table: 
         } else {
             ref_hands += 1;
         }
-        walk(&mut root, r, *me, *is_subject);
+        walk(&mut root, &s.hands[*hi], *me, *is_subject);
     }
+    if let RefSel::File(trees) = reference {
+        if let Some(t) = trees.get(&duel_key(table, me_pos, opp_pos, &pot)) {
+            ref_hands += t.n;
+            merge_file(&mut root, t);
+        }
+    }
+    let aggressor = match pot.split_once(':') {
+        Some((_, "me")) => me_pos.to_string(),
+        Some((_, "opp")) => opp_pos.to_string(),
+        _ => String::new(),
+    };
     let mut pv: Vec<PotOpt> = pots.into_iter().map(|(k, n)| PotOpt { label: pot_label(&k, me_pos, opp_pos), key: k, n }).collect();
     pv.sort_by(|a, b| b.n.cmp(&a.n));
-    PTree { pots: pv, pot, hands, ref_hands, root: finish(root, me_pos) }
+    PTree { pots: pv, pot, aggressor, hands, ref_hands, root: finish(root, me_pos) }
 }
 
 /// Le joueur `i` correspond au filtre « contre ».

@@ -10,7 +10,7 @@ import { RANKS, cellCombos, cellName, gridToString, stringToGrid, type Grid } fr
 export type Fmt = "spin3" | "hu";
 
 export const FORMATS: Record<Fmt, { label: string; short: string; pos: string[] }> = {
-  spin3: { label: "Spin & Go 3-max", short: "Spin", pos: ["BTN", "SB", "BB"] },
+  spin3: { label: "3-way", short: "3-way", pos: ["BTN", "SB", "BB"] },
   hu: { label: "Tête-à-tête (HU)", short: "HU", pos: ["SB", "BB"] },
 };
 

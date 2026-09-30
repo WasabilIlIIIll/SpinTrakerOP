@@ -5,7 +5,7 @@ use super::Filter;
 use crate::analysis::{Pos, Scenario};
 use crate::model::{ActKind, Action, STREET_FLOP, STREET_PREFLOP, STREET_TURN};
 use crate::store::{HandRec, Store};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 pub const BUCKETS: [(f64, f64, &str); 10] = [
@@ -64,7 +64,7 @@ pub struct Panel {
     pub nodes: Vec<NodeOut>,
 }
 
-#[derive(Serialize, Default, Clone)]
+#[derive(Serialize, Deserialize, Default, Clone)]
 pub struct Post {
     pub key: String,
     pub flops: u32,
@@ -408,18 +408,22 @@ pub fn vs_ok(s: &Store, r: &HandRec, me: usize, vs: &str) -> bool {
     })
 }
 
-/// `reference` : "population" | "tag:<id>" | "custom" | "none"
+/// `reference` : "population" | "tag:<id>" | "player:<pseudo>" | "players:<a>|<b>" | "custom" |
+/// "file:<id>" (base importée, passée dans `file`) | "none"
 pub fn leak_report(s: &Store, player: &str, filter: &Filter, reference: &str, min_matrix: bool) -> LeakReport {
-    leak_report_vs(s, player, filter, reference, min_matrix, "")
+    leak_report_vs(s, player, filter, reference, min_matrix, "", None)
 }
 
-pub fn leak_report_vs(s: &Store, player: &str, filter: &Filter, reference: &str, min_matrix: bool, vs: &str) -> LeakReport {
+pub fn leak_report_vs(s: &Store, player: &str, filter: &Filter, reference: &str, min_matrix: bool, vs: &str, file: Option<&super::refdata::RefFile>) -> LeakReport {
     let ref_mode = reference;
     let subject = Subject::parse(s, player);
     let is_hero = matches!(subject, Subject::Hero);
     let sel: HashSet<usize> = filter.select(s).into_iter().collect();
-    let ref_players: Option<HashSet<String>> = if let Some(tag) = reference.strip_prefix("tag:") {
-        Some(s.pstats.keys().filter(|n| s.tags_of(n).iter().any(|t| t == tag)).cloned().collect())
+    let ref_players: Option<HashSet<String>> = if reference.starts_with("tag:") || reference.starts_with("player:") || reference.starts_with("players:") {
+        match Subject::parse(s, reference) {
+            Subject::Set(set) => Some(set),
+            _ => None,
+        }
     } else {
         None
     };
@@ -470,6 +474,22 @@ pub fn leak_report_vs(s: &Store, player: &str, filter: &Filter, reference: &str,
                 }
                 postflop(r, i, &mut post_ref);
             }
+        }
+    }
+    // base de référence importée : ses comptes remplacent ceux calculés sur la base
+    if let Some(f) = file {
+        for (k, n) in &f.nodes {
+            let e = refs.entry(k.clone()).or_default();
+            e.counts = n.counts;
+            for (bl, c) in &n.buckets {
+                if let Some(bi) = BUCKETS.iter().position(|x| x.2 == bl) {
+                    e.buckets[bi] = *c;
+                }
+            }
+        }
+        for p in &f.postflop {
+            let key: &'static str = if p.key == "HU" { "HU" } else { "3-way" };
+            post_ref.insert(key, Post { key: key.into(), ..p.clone() });
         }
     }
     let custom = &s.settings.references;
