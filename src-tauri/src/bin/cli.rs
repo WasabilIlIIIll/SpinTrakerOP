@@ -79,6 +79,54 @@ fn main() {
             println!("ROI EV          {:.2} %", sum.roi.ev);
             println!("Temps joué      {} s ({:.1} spins/h)", sum.seconds, sum.spins_per_hour);
         }
+        Some("parse") if args.len() > 1 => {
+            // lecture brute d'un fichier (sans filtre Spin) : contrôle main par main
+            use spin_tracker_op_lib::{analysis, parser};
+            for p in parser::collect_paths(&[PathBuf::from(&args[1])]) {
+                for src in parser::read_path(&p) {
+                    match parser::parse_source(&src) {
+                        Err(e) => println!("{} : {e}", src.name),
+                        Ok(files) => {
+                            for pf in files {
+                                let t = &pf.tournament;
+                                println!("== {} {} « {} » héros {} buy-in {:.2} rake {:.2} prize {:.2} place {} gain {:.2} {} joueurs · {} mains", t.room, t.code, t.name, t.hero, t.buyin, t.rake, t.prize_pool, t.place, t.winnings, t.table_size, pf.hands.len());
+                                for h in &pf.hands {
+                                    let f = analysis::analyze(h);
+                                    let bad = f.players.iter().map(|x| x.net).sum::<f64>().abs() > 0.5;
+                                    println!(
+                                        "   {} {}j bb {} ante {} héros {} btn {} | {} actions, board {} | nets {:?}{}",
+                                        h.id,
+                                        h.seats.len(),
+                                        h.bb,
+                                        h.ante,
+                                        h.seats[h.hero as usize].name,
+                                        h.seats[h.button as usize].name,
+                                        h.actions.len(),
+                                        h.board.len(),
+                                        f.players.iter().map(|x| x.net.round()).collect::<Vec<_>>(),
+                                        if bad { "  <-- somme des gains ≠ 0" } else { "" }
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Some("tours") => {
+            {
+                let mut db = state.db.lock();
+                let mut st = state.store.write();
+                import::load(&mut db, &mut st).ok();
+            }
+            let s = state.store.read();
+            for t in &s.tours {
+                println!(
+                    "{:<10} {:<22} {:<18} héros {:<14} buy-in {:.2} (rake {:.2}) prize {:.2} x{:.1} place {} gain {:.2} | {} mains, tapis {:.0}, chips {:+.0}, ev {:+.1}",
+                    t.t.room, t.t.code, t.t.name, t.t.hero, t.t.buyin, t.t.rake, t.t.prize_pool, t.t.multiplier, t.t.place, t.t.winnings, t.hands.len(), t.t.starting_stack, t.chips, t.ev
+                );
+            }
+        }
         Some("diag") => {
             {
                 let mut db = state.db.lock();

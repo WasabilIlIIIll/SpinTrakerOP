@@ -210,6 +210,7 @@ pub fn run() {
             commands::leak_report,
             commands::postflop_tree,
             commands::ref_list,
+            commands::hh_folders,
             commands::ref_import,
             commands::ref_delete,
             commands::ref_export,

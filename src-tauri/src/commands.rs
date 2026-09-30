@@ -870,3 +870,9 @@ pub fn export_csv(state: State<AppState>, filter: Filter, path: String) -> R<usi
 pub fn scenarios() -> Vec<&'static str> {
     Scenario::ALL.iter().map(|s| s.label()).collect()
 }
+
+/// Dossiers d'historiques des rooms trouvés sur ce PC (Winamax, PokerStars, Unibet.fr, PMU).
+#[tauri::command]
+pub fn hh_folders() -> Vec<crate::parser::HhFolder> {
+    crate::parser::known_folders()
+}

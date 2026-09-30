@@ -113,8 +113,12 @@ pub fn parse(content: &str, source: &str) -> Result<ParsedFile, String> {
     // chemin (comme dans fpdb). Laissée vide si rien ne l'indique : l'import la déduit alors
     // du pseudo du héros (déjà vu sur une room), PMU par défaut.
     let mut lower = source.to_lowercase();
-    if content.get(..4096.min(content.len())).unwrap_or(content).to_lowercase().contains("betclic") {
-        lower.push_str(" betclic");
+    let head = content.get(..4096.min(content.len())).unwrap_or(content).to_lowercase();
+    for k in ["betclic", "unibet"] {
+        if head.contains(k) {
+            lower.push_str(" ");
+            lower.push_str(k);
+        }
     }
     let room = ["betclic", "unibet", "pmu", "fdj", "barriere", "partouche", "netbet", "bwin", "redbet"]
         .iter()

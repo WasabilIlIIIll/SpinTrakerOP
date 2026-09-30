@@ -99,6 +99,14 @@ pub fn parse_source(src: &RawSource) -> Result<Vec<ParsedFile>, String> {
     if stars::looks_like(c) {
         return stars::parse(c, &src.name);
     }
+    // PokerStars écrit l'historique dans la langue choisie : seuls les fichiers en anglais sont lus
+    // (comme PokerTracker, Holdem Manager, DriveHUD)
+    if c.trim_start().starts_with("PokerStars Game #") {
+        return Err("ancien format PokerStars (avant 2009), antérieur aux Spin & Go : ignoré".into());
+    }
+    if c.trim_start().starts_with("PokerStars") {
+        return Err("historique PokerStars dans une autre langue que l'anglais : dans PokerStars, Réglages › Historique de jeu › Historique des mains, choisis la langue « English » (le logiciel peut rester en français), puis réimporte".into());
+    }
     Err("format non reconnu".into())
 }
 
@@ -179,4 +187,56 @@ mod tests {
         assert_eq!(parse_num("N/A"), 0.0);
         assert_eq!(parse_date("1970-01-02 00:00:01"), Some(86401));
     }
+}
+
+/// Dossier d'historiques d'une room trouvé sur ce PC.
+#[derive(serde::Serialize)]
+pub struct HhFolder {
+    pub room: String,
+    pub path: String,
+    pub files: usize,
+}
+
+/// Dossiers d'historiques par défaut des rooms prises en charge (Windows).
+/// Winamax : `%APPDATA%\winamax\documents\accounts\<pseudo>\history` (nouveau logiciel) ou
+/// `Documents\Winamax Poker\accounts\<pseudo>\history` ; PokerStars : `%LOCALAPPDATA%\PokerStars(.FR)\
+/// HandHistory|TournSummary\<pseudo>` (historiques en anglais) ; Unibet.fr et PMU (logiciel iPoker) :
+/// `<Program Files>\Unibet.fr|PMU Poker\data\<pseudo>\History`.
+pub fn known_folders() -> Vec<HhFolder> {
+    let env = |k: &str| std::env::var(k).map(PathBuf::from).ok();
+    let mut cands: Vec<(&str, PathBuf, &str)> = Vec::new();
+    if let Some(a) = env("APPDATA") {
+        cands.push(("Winamax", a.join("winamax").join("documents").join("accounts"), "history"));
+    }
+    if let Some(u) = env("USERPROFILE") {
+        cands.push(("Winamax", u.join("Documents").join("Winamax Poker").join("accounts"), "history"));
+    }
+    if let Some(l) = env("LOCALAPPDATA") {
+        for site in ["PokerStars.FR", "PokerStars"] {
+            cands.push(("PokerStars", l.join(site).join("HandHistory"), ""));
+            cands.push(("PokerStars", l.join(site).join("TournSummary"), ""));
+        }
+    }
+    for pf in ["ProgramFiles(x86)", "ProgramFiles", "LOCALAPPDATA"] {
+        if let Some(p) = env(pf) {
+            cands.push(("Unibet", p.join("Unibet.fr").join("data"), "History"));
+            cands.push(("PMU", p.join("PMU Poker").join("data"), "History"));
+        }
+    }
+    let mut out: Vec<HhFolder> = Vec::new();
+    for (room, base, sub) in cands {
+        let Ok(rd) = std::fs::read_dir(&base) else { continue };
+        for e in rd.flatten() {
+            let dir = if sub.is_empty() { e.path() } else { e.path().join(sub) };
+            if !dir.is_dir() {
+                continue;
+            }
+            let files = walkdir::WalkDir::new(&dir).into_iter().filter_map(|x| x.ok()).filter(|x| x.path().is_file() && is_candidate(x.path())).count();
+            let path = dir.to_string_lossy().to_string();
+            if files > 0 && !out.iter().any(|f| f.path == path) {
+                out.push(HhFolder { room: room.into(), path, files });
+            }
+        }
+    }
+    out
 }

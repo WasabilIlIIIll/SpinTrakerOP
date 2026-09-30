@@ -21,6 +21,7 @@ export function ImportPage() {
   const [metric, setMetric] = useState<"spins" | "profit" | "ev">("spins");
   const { data: cal } = useQuery(["calendar", filter], () => api.calendar(filter));
   const { data: hist } = useQuery(["imports"], () => api.imports());
+  const { data: folders } = useQuery(["hh-folders"], () => api.hhFolders());
 
   const run = async (paths: string[]) => {
     if (!paths.length) return;
@@ -126,11 +127,10 @@ export function ImportPage() {
             <div className="dz-t">Glissez-déposez vos fichiers, dossiers ou .zip ici</div>
             <div className="formats">
               <span className="fmt ok">PMU (.xml)</span>
-              <span className="fmt">Winamax (.txt + résumés)</span>
+              <span className="fmt ok" title="Expresso et Expresso Nitro : historiques .txt et fichiers « summary »">Winamax Expresso (.txt + résumés)</span>
+              <span className="fmt ok" title="Historiques et « Tournament Summary » en anglais (réglage de l'historique dans PokerStars)">PokerStars Spin &amp; Go (.txt, en anglais)</span>
+              <span className="fmt ok" title="Unibet.fr utilise le logiciel iPoker : mêmes fichiers XML que PMU">Unibet.fr (.xml iPoker)</span>
               <span className="fmt ok">Betclic Spin &amp; Rush (.txt ExportHH, .zip)</span>
-              <span className="fmt">Betclic ancien / iPoker (.xml)</span>
-              <span className="fmt">Unibet (.txt)</span>
-              <span className="fmt">PokerStars Spin &amp; Go (.txt)</span>
             </div>
             <div className="muted small">Room détectée automatiquement · doublons ignorés · seuls les formats Spin (2-3 joueurs) sont conservés.</div>
             <div className="row gap8">
@@ -144,6 +144,29 @@ export function ImportPage() {
           </>
         )}
       </div>
+      {!busy && folders && folders.length > 0 && (
+        <Panel title="Dossiers d'historiques trouvés sur ce PC" help="Emplacements par défaut de Winamax, PokerStars (.FR et .com), Unibet.fr et PMU. Un clic importe tout le dossier ; les mains déjà en base sont ignorées.">
+          <div className="hh-folders">
+            {folders.map((f) => (
+              <div key={f.path} className="hh-folder">
+                <b>{f.room}</b>
+                <span className="muted small hh-path" title={f.path}>
+                  {f.path}
+                </span>
+                <span className="muted small">{num(f.files)} fichiers</span>
+                <Btn small icon="upload" onClick={() => run([f.path])}>
+                  Importer
+                </Btn>
+              </div>
+            ))}
+          </div>
+          {folders.length > 1 && (
+            <Btn kind="primary" icon="upload" onClick={() => run(folders.map((f) => f.path))}>
+              Tout importer
+            </Btn>
+          )}
+        </Panel>
+      )}
       {result && (
         <Panel title="Dernier import">
           <div className="tiles tiles-6">

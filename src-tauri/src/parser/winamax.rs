@@ -1,5 +1,6 @@
 //! Parser Winamax (Expresso) — historiques texte + fichiers "summary". Statut : bêta.
 
+use super::common::first_num;
 use super::{parse_date_tz, parse_num, ParsedFile};
 use crate::model::*;
 
@@ -262,21 +263,21 @@ fn parse_hand(lines: &[&str]) -> Option<HandOut> {
         let verb = l[nl..].trim();
         let allin = verb.contains("all-in");
         let (kind, amount) = if verb.starts_with("posts small blind") {
-            (ActKind::SmallBlind, parse_num(&verb[17..]))
+            (ActKind::SmallBlind, first_num(&verb[17..]).unwrap_or(0.0))
         } else if verb.starts_with("posts big blind") {
-            (ActKind::BigBlind, parse_num(&verb[15..]))
+            (ActKind::BigBlind, first_num(&verb[15..]).unwrap_or(0.0))
         } else if verb.starts_with("posts ante") {
-            (ActKind::Ante, parse_num(&verb[10..]))
+            (ActKind::Ante, first_num(&verb[10..]).unwrap_or(0.0))
         } else if verb.starts_with("folds") {
             (ActKind::Fold, 0.0)
         } else if verb.starts_with("checks") {
             (ActKind::Check, 0.0)
         } else if verb.starts_with("calls") {
-            (ActKind::Call, parse_num(verb[5..].split(" and").next().unwrap_or("")))
+            (ActKind::Call, first_num(&verb[5..]).unwrap_or(0.0))
         } else if verb.starts_with("bets") {
-            (ActKind::Bet, parse_num(verb[4..].split(" and").next().unwrap_or("")))
+            (ActKind::Bet, first_num(&verb[4..]).unwrap_or(0.0))
         } else if verb.starts_with("raises") {
-            let to = verb.split(" to ").nth(1).map(|x| parse_num(x.split(" and").next().unwrap_or(""))).unwrap_or(0.0);
+            let to = verb.split(" to ").nth(1).and_then(first_num).unwrap_or(0.0);
             (ActKind::Raise, (to - street_put[k]).max(0.0))
         } else if verb.starts_with("shows") {
             let cs = cards_in_brackets(verb);
@@ -285,7 +286,7 @@ fn parse_hand(lines: &[&str]) -> Option<HandOut> {
             }
             continue;
         } else if verb.starts_with("collected") {
-            seats[k].win += parse_num(verb[9..].split(" from").next().unwrap_or(""));
+            seats[k].win += first_num(&verb[9..]).unwrap_or(0.0);
             continue;
         } else {
             continue;
@@ -300,4 +301,103 @@ fn parse_hand(lines: &[&str]) -> Option<HandOut> {
     }
     let hero = seats.iter().position(|s| s.name == hero_name)? as u8;
     Some((tid.clone(), hero_name, name, buy, Hand { id: format!("wmx:{hid}"), tid, ts, sb, bb, ante, seats, button, hero, actions, board }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::analysis::analyze;
+
+    // format réel des historiques Expresso (vérifié sur des fichiers de novembre 2025), pseudos inventés
+    const HANDS: &str = "Winamax Poker - Tournament \"Expresso Nitro\" buyIn: 0.93€ + 0.07€ level: 4 - HandId: #111-14-1764498691 - Holdem no limit (30/60) - 2025/11/30 10:31:31 UTC
+Table: 'Expresso Nitro(1025035220)#0' 3-max (real money) Seat #1 is the button
+Seat 1: Hero (536)
+Seat 2: Alpha (308)
+Seat 3: Beta (56)
+*** ANTE/BLINDS ***
+Alpha posts small blind 30
+Beta posts big blind 56 and is all-in
+Dealt to Hero [7d Th]
+*** PRE-FLOP *** 
+Hero folds
+Alpha calls 30
+*** FLOP *** [Ah 2s As]
+*** TURN *** [Ah 2s As][Ac]
+*** RIVER *** [Ah 2s As Ac][2h]
+*** SHOW DOWN ***
+Alpha shows [Js 9c] (Full of Aces and 2)
+Beta shows [8h Jd] (Full of Aces and 2)
+Beta collected 56 from main pot
+Alpha collected 60 from side pot 1
+*** SUMMARY ***
+Total pot 116 | No rake
+
+
+Winamax Poker - Tournament \"Expresso Nitro\" buyIn: 0.93€ + 0.07€ level: 4 - HandId: #111-15-1764498704 - Holdem no limit (30/60) - 2025/11/30 10:31:44 UTC
+Table: 'Expresso Nitro(1025035220)#0' 3-max (real money) Seat #2 is the button
+Seat 1: Hero (536)
+Seat 2: Alpha (308)
+Seat 3: Beta (56)
+*** ANTE/BLINDS ***
+Beta posts small blind 30
+Hero posts big blind 60
+Dealt to Hero [7h 9s]
+*** PRE-FLOP *** 
+Alpha folds
+Beta calls 26 and is all-in
+*** FLOP *** [Js Qs 8d]
+*** TURN *** [Js Qs 8d][Kd]
+*** RIVER *** [Js Qs 8d Kd][5c]
+*** SHOW DOWN ***
+Hero shows [7h 9s] (High card : King)
+Beta shows [3h 8s] (One pair : 8)
+Beta collected 112 from main pot
+Hero collected 4 from side pot 1
+*** SUMMARY ***
+Total pot 116 | No rake
+";
+
+    const SUMMARY: &str = "Winamax Poker - Tournament summary : Expresso Nitro(1025035220)
+Player : Hero
+Buy-In : 0.93€ + 0.07€
+Registered players : 3
+Prizepool : 3€
+Tournament started 2025/11/30 10:25:59 UTC
+You played 1min 25s 
+You finished in 1st place
+You won 3€
+";
+
+    #[test]
+    fn expresso_hands() {
+        let p = parse(HANDS, "t.txt").unwrap();
+        assert_eq!(p.len(), 1);
+        let t = &p[0].tournament;
+        assert_eq!(t.id, "wmx:1025035220");
+        assert!((t.buyin - 1.0).abs() < 1e-9 && (t.rake - 0.07).abs() < 1e-9);
+        let h = &p[0].hands;
+        assert_eq!(h.len(), 2);
+        // la big blind postée à tapis compte bien 56 (et non 0)
+        let bb = h[0].actions.iter().find(|a| a.kind == ActKind::BigBlind).unwrap();
+        assert!((bb.amount - 56.0).abs() < 1e-9 && bb.allin);
+        // gains cohérents : tapis suivant = tapis + résultat, somme des résultats nulle
+        for hand in h {
+            let f = analyze(hand);
+            assert!(f.players.iter().map(|x| x.net).sum::<f64>().abs() < 1e-6);
+        }
+        let f = analyze(&h[0]);
+        assert!((f.players[1].stack_after - 308.0).abs() < 1e-6);
+        assert!((f.players[2].stack_after - 56.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn expresso_summary() {
+        let p = parse(SUMMARY, "s.txt").unwrap();
+        let t = &p[0].tournament;
+        assert_eq!(t.id, "wmx:1025035220");
+        assert_eq!(t.place, 1);
+        assert!((t.winnings - 3.0).abs() < 1e-9 && (t.prize_pool - 3.0).abs() < 1e-9);
+        assert!((t.multiplier - 3.0).abs() < 1e-9);
+        assert_eq!(t.end - t.start, 85);
+    }
 }

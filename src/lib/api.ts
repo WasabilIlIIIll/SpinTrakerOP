@@ -553,6 +553,7 @@ export const api = {
   postflopTree: (q: { player: string; filter: Filter; vs: string; table: string; mePos: string; oppPos: string; pot: string; buckets: string[]; reference: string }) =>
     call<PTree>("postflop_tree", { player: q.player, filter: q.filter, vs: q.vs, table: q.table, mePos: q.mePos, oppPos: q.oppPos, pot: q.pot, buckets: q.buckets, reference: q.reference }),
   refList: () => call<RefInfo[]>("ref_list"),
+  hhFolders: () => call<{ room: string; path: string; files: number }[]>("hh_folders"),
   refImport: (path: string) => call<string>("ref_import", { path }),
   refDelete: (id: string) => call<void>("ref_delete", { id }),
   refExport: (who: string, filter: Filter, name: string, description: string, path: string) => call<number>("ref_export", { who, filter, name, description, path }),

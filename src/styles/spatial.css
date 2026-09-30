@@ -464,3 +464,8 @@ html[data-focus="on"] .pane-left, html[data-focus="on"] .pane-right { visibility
 .ptn-sizes i { display: block; height: 100%; }
 .ptn-f { display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 .ptn-next { padding: 1px 7px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); color: var(--text); }
+
+/* import : dossiers d'historiques trouvés */
+.hh-folders { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.hh-folder { display: grid; grid-template-columns: 100px minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 8px 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.04); }
+.hh-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }

@@ -72,6 +72,7 @@ struct Head {
     bb: f64,
     ts: i64,
     prize: f64,
+    currency: &'static str,
 }
 
 fn parse_head(l: &str) -> Option<Head> {
@@ -102,11 +103,13 @@ fn parse_head(l: &str) -> Option<Head> {
         _ => (0.0, 0.0),
     };
     let prize = between(l, "Total prize", " -").map(parse_num).unwrap_or(0.0);
-    Some(Head { room, hid, tcode, buyin, sb, bb, ts: find_date(l).unwrap_or(0), prize })
+    let currency = if l.contains(" USD") || l.contains('$') { "USD" } else { "EUR" };
+    Some(Head { room, hid, tcode, buyin, sb, bb, ts: find_date(l).unwrap_or(0), prize, currency })
 }
 
 struct Raw {
     tid: String,
+    currency: &'static str,
     room: &'static str,
     head_buyin: Vec<f64>,
     prize: f64,
@@ -272,14 +275,17 @@ fn parse_hand(lines: &[&str]) -> Option<Raw> {
         }
     };
     let tid = format!("{}:{}", if head.room == "Unibet" { "unb" } else { "pst" }, head.tcode);
+    // ante de la main (la plus grosse ante postée)
+    let ante = actions.iter().filter(|a| a.kind == ActKind::Ante).map(|a| a.amount).fold(0.0, f64::max);
     Some(Raw {
         tid: tid.clone(),
+        currency: head.currency,
         room: head.room,
         head_buyin: head.buyin,
         prize: head.prize,
         max_seats: if max_seats > 0 { max_seats } else { seats.len() as u8 },
         had_wins,
-        hand: Hand { id: format!("{tid}:{}", head.hid), tid, ts: head.ts, sb: head.sb, bb: head.bb, ante: 0.0, seats, button: button as u8, hero, actions, board },
+        hand: Hand { id: format!("{tid}:{}", head.hid), tid, ts: head.ts, sb: head.sb, bb: head.bb, ante, seats, button: button as u8, hero, actions, board },
     })
 }
 
@@ -362,6 +368,7 @@ pub fn parse(c: &str, source: &str) -> Result<Vec<ParsedFile>, String> {
         };
         let prize = raws.iter().map(|r| r.prize).fold(0.0, f64::max);
         let room = f.room;
+        let currency = f.currency;
         let max_seats = raws.iter().map(|r| r.max_seats).max().unwrap_or(3);
         let hero_name = f.hand.seats[f.hand.hero as usize].name.clone();
         let starting_stack = f.hand.seats[f.hand.hero as usize].stack;
@@ -390,7 +397,7 @@ pub fn parse(c: &str, source: &str) -> Result<Vec<ParsedFile>, String> {
             place: 0,
             winnings: 0.0,
             table_size: max_seats,
-            currency: "EUR".into(),
+            currency: currency.into(),
             starting_stack,
             hands: hands.len() as u32,
             source: source.into(),
@@ -399,4 +406,74 @@ pub fn parse(c: &str, source: &str) -> Result<Vec<ParsedFile>, String> {
     }
     let _ = days_from_civil;
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::analysis::analyze;
+
+    // format PokerStars (anglais) d'un Spin & Go, pseudos inventés
+    const HANDS: &str = "PokerStars Hand #229876543210: Tournament #3123456789, €4.65+€0.35 EUR Hold'em No Limit - Level I (10/20) - 2021/06/06 21:00:00 CET [2021/06/06 15:00:00 ET]
+Table '3123456789 1' 3-max Seat #1 is the button
+Seat 1: Hero (500 in chips)
+Seat 2: Alpha (500 in chips)
+Seat 3: Beta (500 in chips)
+Alpha: posts small blind 10
+Beta: posts big blind 20
+*** HOLE CARDS ***
+Dealt to Hero [Ah Kh]
+Hero: raises 20 to 40
+Alpha: folds
+Beta: calls 20
+*** FLOP *** [2c 7d Kc]
+Beta: checks
+Hero: bets 50
+Beta: folds
+Uncalled bet (50) returned to Hero
+Hero collected 90 from pot
+*** SUMMARY ***
+Total pot 90 | Rake 0
+";
+
+    const SUMMARY: &str = "PokerStars Tournament #3123456789, No Limit Hold'em
+Buy-In: €4.65/€0.35 EUR
+3 players
+Total Prize Pool: €10.00 EUR
+Tournament started 2021/06/06 21:00:00 CET [2021/06/06 15:00:00 ET]
+  1: Hero (France), €10.00 (100%)
+  2: Alpha (Spain),
+  3: Beta (Italy),
+You finished in 1st place.
+";
+
+    #[test]
+    fn spin_hand() {
+        let p = parse(HANDS, "h.txt").unwrap();
+        let t = &p[0].tournament;
+        assert_eq!(t.id, "pst:3123456789");
+        assert_eq!(t.currency, "EUR");
+        assert!((t.buyin - 5.0).abs() < 1e-9 && (t.rake - 0.35).abs() < 1e-9);
+        let h = &p[0].hands[0];
+        assert_eq!(h.seats[h.hero as usize].name, "Hero");
+        let f = analyze(h);
+        // mise non suivie rendue : le héros gagne le pot de 90 moins sa mise de 40
+        assert!((f.players[0].net - 50.0).abs() < 1e-6);
+        assert!(f.players.iter().map(|x| x.net).sum::<f64>().abs() < 1e-6);
+    }
+
+    #[test]
+    fn spin_summary() {
+        let p = parse(SUMMARY, "s.txt").unwrap();
+        let t = &p[0].tournament;
+        assert_eq!(t.place, 1);
+        assert!((t.prize_pool - 10.0).abs() < 1e-9 && (t.winnings - 10.0).abs() < 1e-9);
+        assert!((t.multiplier - 2.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn french_history_is_explained() {
+        let e = crate::parser::parse_source(&crate::parser::RawSource { name: "x.txt".into(), content: "PokerStars Main n° 1 : Tournoi n° 2".into() }).err().unwrap();
+        assert!(e.contains("English"));
+    }
 }
