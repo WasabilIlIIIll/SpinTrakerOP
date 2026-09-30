@@ -72,12 +72,12 @@ export const SPATIAL: Theme = {
     "--shadow-1": "inset 0 1px 0 rgba(255,255,255,0.08), 0 12px 32px rgba(0,0,0,0.28)",
     "--shadow-2": "0 30px 80px rgba(0,0,0,0.5)",
     ...seriesDark,
-    // Chips gagnés reprend la palette de Bankroll : réel = bleu (Réel + RB), EV = or (EV Profit),
-    // SD = vert (Profit réel), NSD = violet (EV Multi), CEV min = rose (EV effectif)
-    "--s-chips": "#4d9bff",
-    "--s-ev": "#f3b13a",
-    "--s-sd": "#3ecf6d",
-    "--s-nsd": "#c77dff",
+    // Chips gagnés (choix de Laszlo) : chips = vert, SD = bleu, NSD = rouge, EV = jaune ;
+    // CEV min en rose (pointillés)
+    "--s-chips": "#3ecf6d",
+    "--s-sd": "#4d9bff",
+    "--s-nsd": "#ff5a5f",
+    "--s-ev": "#f6c945",
     "--s-min": "#ff8fab",
   },
 };
