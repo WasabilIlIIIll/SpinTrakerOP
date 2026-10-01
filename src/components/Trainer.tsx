@@ -36,7 +36,8 @@ import {
 } from "../lib/ranges";
 
 interface Cfg {
-  fmt: Fmt;
+  /** format entraîné : 3-way, tête-à-tête, ou les deux mélangés */
+  fmt: Fmt | "all";
   depths: number[];
   tables: number;
   positions: string[];
@@ -113,7 +114,7 @@ function buildPool(book: RangeBook, fmt: Fmt, depths: number[], positions: strin
       if (!strat) continue;
       // spot qu'aucune main n'atteint (ligne jamais jouée) : rien à entraîner
       if (!heroReach(db, fmt, depth, db.sizes, sp.state.history).some((w) => w > 0)) continue;
-      out.push({ id, depth, prob: lineProb(db, fmt, depth, sp.state.history), spot: sp, label: `${fmtBB(depth)} bb · ${spotLabel(sp, db.sizes)}`, strat, reach: heroReach(db, fmt, depth, db.sizes, sp.state.history), sizes: db.sizes, ev: db.ev?.[sp.key] });
+      out.push({ id, depth, prob: lineProb(db, fmt, depth, sp.state.history), spot: sp, label: `${FORMATS[fmt].short} · ${fmtBB(depth)} bb · ${spotLabel(sp, db.sizes)}`, strat, reach: heroReach(db, fmt, depth, db.sizes, sp.state.history), sizes: db.sizes, ev: db.ev?.[sp.key] });
     }
   }
   return out;
@@ -258,13 +259,15 @@ export function Trainer({ book }: { book: RangeBook }) {
       });
   }, []);
 
-  const depthsWith = [...new Set(book.books.filter((b) => b.fmt === cfg.fmt && Object.keys(b.nodes).length).map((b) => b.depth))].sort((a, b) => b - a);
+  const fmts: Fmt[] = cfg.fmt === "all" ? (Object.keys(FORMATS) as Fmt[]) : [cfg.fmt];
+  const depthsWith = [...new Set(book.books.filter((b) => fmts.includes(b.fmt) && Object.keys(b.nodes).length).map((b) => b.depth))].sort((a, b) => b - a);
   const depths = cfg.depths.filter((d) => depthsWith.includes(d));
   const useDepths = depths.length ? depths : depthsWith;
-  const pool = useMemo(() => buildPool(book, cfg.fmt, useDepths, cfg.positions, cfg.off), [book, cfg.fmt, useDepths.join(","), cfg.positions.join(","), cfg.off.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
-  const allSpots = useMemo(() => buildPool(book, cfg.fmt, useDepths, cfg.positions, []), [book, cfg.fmt, useDepths.join(","), cfg.positions.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+  const poolOf = (positions: string[], off: string[]) => fmts.flatMap((f) => buildPool(book, f, useDepths, positions, off));
+  const pool = useMemo(() => poolOf(cfg.positions, cfg.off), [book, cfg.fmt, useDepths.join(","), cfg.positions.join(","), cfg.off.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+  const allSpots = useMemo(() => poolOf(cfg.positions, []), [book, cfg.fmt, useDepths.join(","), cfg.positions.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
   // tous les spots du format (toutes profondeurs et positions) : base du suivi
-  const index = useMemo(() => new Map(buildPool(book, cfg.fmt, depthsWith, [], []).map((p) => [p.id, p])), [book, cfg.fmt, depthsWith.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+  const index = useMemo(() => new Map(fmts.flatMap((f) => buildPool(book, f, depthsWith, [], [])).map((p) => [p.id, p])), [book, cfg.fmt, depthsWith.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const sessionPool = review ? review.queue.map((q) => q.ps) : custom?.pool.length ? custom.pool : pool;
   if (running && loaded === "no") return <Loading />;
@@ -287,7 +290,12 @@ export function Trainer({ book }: { book: RangeBook }) {
       />
     );
 
-  const pos = FORMATS[cfg.fmt].pos;
+  const pos = [...new Set(fmts.flatMap((f) => FORMATS[f].pos))];
+  const FMT_CHOICES: [Cfg["fmt"], string][] = [
+    ["spin3", "3-way"],
+    ["hu", "HU"],
+    ["all", "Les deux"],
+  ];
   const toggle = <T,>(arr: T[], v: T) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
 
   return (
@@ -297,11 +305,11 @@ export function Trainer({ book }: { book: RangeBook }) {
         <div className="tr-side">
 
         <div className="col gap16">
-          <Row label="Format">
-            <div className="seg seg-sm">
-              {(Object.keys(FORMATS) as Fmt[]).map((f) => (
+          <Row label="Format" help="3-way : les spots à trois joueurs (BTN, SB, BB). HU : le tête-à-tête (SB contre BB). Les deux : spots des deux formats mélangés.">
+            <div className="tr-fmt">
+              {FMT_CHOICES.map(([f, l]) => (
                 <button key={f} className={cls(cfg.fmt === f && "on")} onClick={() => setCfg({ fmt: f, positions: [], depths: [] })}>
-                  {FORMATS[f].label}
+                  {l}
                 </button>
               ))}
             </div>
@@ -384,7 +392,7 @@ export function Trainer({ book }: { book: RangeBook }) {
       <div className="tr-launch">
         <div className="col gap6">
           <b className="tr-launch-t">
-            {FORMATS[cfg.fmt].label} · {useDepths.length ? useDepths.map((d) => fmtBB(d)).join(", ") + " bb" : "aucune profondeur"} · {cfg.tables} table{cfg.tables > 1 ? "s" : ""}
+            <span className="tr-fmt-badge">{cfg.fmt === "all" ? "3-way + HU" : FORMATS[cfg.fmt].short}</span> {useDepths.length ? useDepths.map((d) => fmtBB(d)).join(", ") + " bb" : "aucune profondeur"} · {cfg.tables} table{cfg.tables > 1 ? "s" : ""}
           </b>
           <span className="muted small">Raccourcis sur la table sous la souris · touches 1 à 9 = boutons dans l'ordre · Espace = main suivante après une erreur.</span>
           {last && last.n > 0 && (
